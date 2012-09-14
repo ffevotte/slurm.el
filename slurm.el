@@ -1,3 +1,29 @@
+;;; slurm.el --- interaction with the SLURM job scheduling system
+
+;; Copyright (C) 2012 François Févotte
+
+;; This program is free software: you can redistribute it and/or modify
+;; it under the terms of the GNU General Public License as published by
+;; the Free Software Foundation, either version 3 of the License, or
+;; (at your option) any later version.
+
+;; This program is distributed in the hope that it will be useful,
+;; but WITHOUT ANY WARRANTY; without even the implied warranty of
+;; MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+;; GNU General Public License for more details.
+
+;; You should have received a copy of the GNU General Public License
+;; along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+
+;;; Commentary:
+
+;; If you make improvements to this code or have suggestions, please do not hesitate to fork the
+;; repository or submit bug reports on github. The repository is at:
+;;
+;;     https://github.com/ffevotte/slurm.el
+
+;;; Code:
 
 ;;;;;;;;;;;;;;;;
 ;; slurm mode ;;
@@ -236,7 +262,8 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
 (defun slurm-job-user-details ()
   "Display details on the jub submitter, as returned by the shell `finger' utility."
   (interactive)
-  (shell-command (concat "finger " (slurm-job-user))))
+  (when (eq slurm-view 'slurm-job-list)
+    (shell-command (concat "finger " (slurm-job-user)))))
 
 (defun slurm-job-details ()
   (when (eq major-mode 'slurm-mode)
@@ -377,3 +404,7 @@ Key bindings:
     (kill-buffer)
     (switch-to-buffer "*slurm*")
     (slurm-refresh)))
+
+(provide 'slurm)
+
+;; slurm.el ends here
