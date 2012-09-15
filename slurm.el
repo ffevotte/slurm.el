@@ -25,9 +25,32 @@
 
 ;;; Code:
 
+(defgroup slurm nil
+  "Interacting with the SLURM jobs scheduling system."
+  :group 'external)
+
+(defcustom slurm-display-help t
+  "If non-nil, slurm-mode should display an help message at the top of the screen."
+  :group 'slurm
+  :type 'boolean)
+
+(defcustom slurm-filter-user-at-start t
+  "If non-nil, the jobs list is filtered by user at start."
+  :group 'slurm
+  :type 'boolean)
+
+
 ;;;;;;;;;;;;;;;;
 ;; slurm mode ;;
 ;;;;;;;;;;;;;;;;
+
+;;;###autoload
+(defun slurm ()
+  "Open a slurm-mode buffer to manage jobs."
+  (interactive)
+  (switch-to-buffer (get-buffer-create "*slurm*"))
+  (slurm-mode))
+
 
 (defvar slurm-mode-map nil
   "keymap for slurm-mode.")
@@ -54,18 +77,17 @@
     (define-key slurm-mode-map (kbd "s d") 'slurm-sort-default)
     (define-key slurm-mode-map (kbd "s c") 'slurm-sort)))
 
-(defvar slurm-display-help t
-  "If non-nil, slurm-mode should display an help message at the top of the screen.")
-
-(defvar slurm-filter-user-at-start t
-  "If non-nil, the jobs list is filtered by user at start.")
-
-;;;###autoload
-(defun slurm ()
-  "Open a slurm-mode buffer to manage jobs."
-  (interactive)
-  (switch-to-buffer (get-buffer-create "*slurm*"))
-  (slurm-mode))
+(defvar slurm-initialized)
+(defvar slurm-command)
+(defvar slurm-view)
+(defvar slurm-partitions)
+(defvar slurm-user)
+(defvar slurm-user-switch)
+(defvar slurm-partition)
+(defvar slurm-partition-switch)
+(defvar slurm-sort)
+(defvar slurm-sort-switch)
+(defvar slurm-jobid)
 
 (defun slurm-mode ()
   "Major-mode for interacting with slurm.
@@ -107,22 +129,31 @@ Customization variables:
   (hl-line-mode 1)
   (setq buffer-read-only t)
 
-  (make-local-variable 'slurm-initialized)
-  (setq slurm-initialized nil)
+  ;; As long as `slurm-initialized' is nil, filters and sort don't try to refresh the view
+  (set (make-local-variable 'slurm-initialized) nil)
 
-  (make-local-variable 'slurm-command)
-  (make-local-variable 'slurm-view)
+  (set (make-local-variable 'slurm-command) nil)
+  (set (make-local-variable 'slurm-view) nil)
+  (set (make-local-variable 'slurm-user) (getenv "USER"))
+  (set (make-local-variable 'slurm-partitions) (slurm-list-partitions))
+  (make-local-variable 'slurm-jobid)
+
+  ;; Initialize user filter
   (make-local-variable 'slurm-user)
-  (setq slurm-user (getenv "USER"))
-
-  (make-local-variable 'slurm-partitions)
-  (setq slurm-partitions (slurm-list-partitions))
-
+  (make-local-variable 'slurm-user-switch)
   (if slurm-filter-user-at-start
       (slurm-filter-user slurm-user)
-    (slurm-filter-user    ""))
-  (slurm-filter-partition "")
-  (slurm-sort             "")
+    (slurm-filter-user ""))
+
+  ;; Initialize partition filter
+  (make-local-variable 'slurm-partition)
+  (make-local-variable 'slurm-partition-switch)
+  (slurm-filter-partition "*ALL*")
+
+  ;; Initialize sorting order
+  (make-local-variable 'slurm-sort)
+  (make-local-variable 'slurm-sort-switch)
+  (slurm-sort "")
 
   (setq slurm-initialized t)
 
@@ -189,9 +220,7 @@ Customization variables:
   "Filter slurm jobs by user."
   (interactive (list (read-from-minibuffer "User name (blank for all)? " slurm-user)))
   (when (eq major-mode 'slurm-mode)
-    (make-local-variable 'slurm-user)
     (setq slurm-user user)
-    (make-local-variable 'slurm-user-switch)
     (setq slurm-user-switch (if (string= slurm-user "") ""
                               (format "-u '%s'" slurm-user)))
     (when slurm-initialized (slurm-job-list))))
@@ -201,9 +230,7 @@ Customization variables:
   (interactive (list (completing-read "Partition name: " (append (list "*ALL*") slurm-partitions)
                                       nil nil nil nil slurm-partition)))
   (when (eq major-mode 'slurm-mode)
-    (make-local-variable 'slurm-partition)
     (setq slurm-partition partition)
-    (make-local-variable 'slurm-partition-switch)
     (setq slurm-partition-switch (if (string= slurm-partition "*ALL*") ""
                                    (format "-p '%s'" slurm-partition)))
     (when slurm-initialized (slurm-job-list))))
@@ -214,9 +241,7 @@ Customization variables:
 ARG must be in a form suitable to be passed as a '-S' switch to the squeue command (see `man squeue')."
   (interactive (list (read-from-minibuffer "Sort by (blank for default)? " slurm-sort)))
   (when (eq major-mode 'slurm-mode)
-    (make-local-variable 'slurm-sort)
     (setq slurm-sort arg)
-    (make-local-variable 'slurm-sort-switch)
     (setq slurm-sort-switch (if (string= slurm-sort "") ""
                               (format "-S '%s'" slurm-sort)))
     (when slurm-initialized (slurm-job-list))))
@@ -268,7 +293,6 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
 (defun slurm-job-details ()
   (when (eq major-mode 'slurm-mode)
     (when (eq slurm-view 'slurm-job-list)
-      (make-local-variable 'slurm-jobid)
       (let ((jobid  (slurm-job-id)))
         (setq slurm-command (format "scontrol show job %s" jobid))
         (setq slurm-jobid   jobid))
@@ -290,7 +314,7 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
   (interactive)
   (when (eq major-mode 'slurm-mode)
     (let ((jobid (slurm-job-id)))
-      (switch-to-buffer (get-buffer-create (format "*slurm update job %s*" slurm-jobid)))
+      (switch-to-buffer (get-buffer-create (format "*slurm update job %s*" jobid)))
       (slurm-update-mode)
       (setq slurm-command (format "scontrol show job '%s'" jobid))
       (slurm-update-refresh))))
