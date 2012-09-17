@@ -156,9 +156,17 @@ Customization variables:
   (make-local-variable 'slurm-sort-switch)
   (slurm-sort "")
 
+  ;; Draw display
   (setq slurm-initialized t)
+  (slurm-job-list)
 
-  (slurm-job-list))
+  ;; Arrange for `revert-buffer' to call `slurm-refresh'
+  (set (make-local-variable 'revert-buffer-function)
+       (lambda (&optional ignore-auto noconfirm) (slurm-refresh)))
+  (set (make-local-variable 'buffer-stale-function)
+       #'(lambda (&optional noconfirm) 'fast))
+  (set (make-local-variable 'auto-revert-interval) 30))
+
 
 
 
@@ -187,24 +195,27 @@ Customization variables:
   "Refresh current slurm view."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (setq buffer-read-only nil)
-    (erase-buffer)
-    (shell-command "date" t)
-    (when slurm-display-help
-      (forward-line)(newline)
-      (insert "Type `h' to display an help message"))
-    (let ((commands (if (listp slurm-command) slurm-command
-                      (list slurm-command))))
+    (let ((old-line (max (line-number-at-pos) 8))
+          commands)
+      (setq buffer-read-only nil)
+      (erase-buffer)
+      (shell-command "date" t)
+      (when slurm-display-help
+        (forward-line)(newline)
+        (insert "Type `h' to display an help message"))
+      (setq commands (if (listp slurm-command) slurm-command
+                       (list slurm-command)))
       (dolist (command commands)
         (goto-char (point-max))(newline 3)
         (let ((pos1  (point)))
           (insert "> " command)
           (add-text-properties pos1 (point) '(face ((:weight bold)))))
         (newline 2)
-        (shell-command command t)))
-    (delete-trailing-whitespace)
-    (goto-char (point-min))(forward-line 6)
-    (setq buffer-read-only t)))
+        (shell-command command t))
+      (delete-trailing-whitespace)
+      (goto-char (point-min))(forward-line (1- old-line))
+      (setq buffer-read-only t)
+      (set-buffer-modified-p nil))))
 
 (defun slurm-details ()
   "Show details on the current slurm entity (job or partition depending on the context)."
