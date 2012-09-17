@@ -53,6 +53,8 @@ A few operations can be done from this view :
   - `d`: use the default sorting order;
   - `c`: customize sorting order by specifying a suitable argument for the `-S` switch of `squeue`.
 
+  Pass the sorting command a prefix argument to reverse the order.
+
 ### Partitions list
 
 This view displays a list of all partitions on the cluster, as obtained with the `scontrol show

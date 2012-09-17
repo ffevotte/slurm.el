@@ -74,6 +74,7 @@
     (define-key slurm-mode-map (kbd "/ p") 'slurm-filter-partition)
     (define-key slurm-mode-map (kbd "s u") 'slurm-sort-user)
     (define-key slurm-mode-map (kbd "s p") 'slurm-sort-partition)
+    (define-key slurm-mode-map (kbd "s P") 'slurm-sort-priority)
     (define-key slurm-mode-map (kbd "s d") 'slurm-sort-default)
     (define-key slurm-mode-map (kbd "s c") 'slurm-sort)))
 
@@ -167,7 +168,7 @@ Customization variables:
   "Switch to slurm jobs list view."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (let ((format-switch "-o '%.7i %9P %30j %8u %2t %.10M %.5D %40R'"))
+    (let ((format-switch "-o '%.7i %9P %30j %8u %2t %.10M %.5D %.5Q %40R'"))
       (setq slurm-command (format "squeue %s %s %s %s" format-switch slurm-user-switch slurm-partition-switch slurm-sort-switch)))
     (setq mode-name "Slurm (jobs list)")
     (setq slurm-view 'slurm-job-list)
@@ -246,15 +247,32 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
                               (format "-S '%s'" slurm-sort)))
     (when slurm-initialized (slurm-job-list))))
 
-(defun slurm-sort-user ()
-  "Sort slurm jobs by user."
-  (interactive)
-  (slurm-sort "U"))
+(defun slurm-sort-user (&optional argp)
+  "Sort slurm jobs by user name.
 
-(defun slurm-sort-partition ()
-  "Sort slurm jobs by partition."
-  (interactive)
-  (slurm-sort "P"))
+Give a prefix argument to reverse the sorting order."
+  (interactive "P")
+  (if argp
+      (slurm-sort "-u")
+    (slurm-sort "u")))
+
+(defun slurm-sort-partition (&optional argp)
+  "Sort slurm jobs by partition.
+
+Give a prefix argument to reverse the sorting order."
+  (interactive "P")
+  (if argp
+      (slurm-sort "-P")
+    (slurm-sort "P")))
+
+(defun slurm-sort-priority (&optional argp)
+  "Sort slurm jobs by priority.
+
+Give a prefix argument to reverse the sorting order."
+  (interactive "P")
+  (if argp
+      (slurm-sort "-p")
+    (slurm-sort "p")))
 
 (defun slurm-sort-default ()
   "Revert to default slurm jobs sorting order."
