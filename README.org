@@ -1,0 +1,149 @@
+#+TITLE: slurm.el
+#+OPTIONS: toc:nil
+
+=slurm.el= is an Emacs extension allowing to work more easily with the [[https://computing.llnl.gov/linux/slurm/][SLURM]] job scheduling system.
+
+It is composed of two parts:
+
+1. =slurm-script-mode=: a minor mode providing syntax highlighting for =#SBATCH= keywords in job
+   submission scripts;
+2. =slurm-mode=: a major mode allowing interaction with SLURM.
+
+
+* Installation
+
+  #+begin_src emacs-lisp
+    (add-to-list 'load-path "/path/to/slurm.el")
+    (require 'slurm)
+  #+end_src
+
+
+* =slurm-script-mode=
+
+  =slurm-script-mode= automatically activates for shell-scripts containing =#SBATCH= directives. It
+  can also be manually toggled by running =M-x slurm-script-mode=.
+
+  While in this mode, =#SBATCH= directives are highlighted. New directives can be easily inserted
+  using the =C-c C-d= key, which proposes completion on the keywords.
+
+
+* =slurm-mode=
+
+** Basic usage
+
+   Just run =M-x slurm= to see a list of all SLURM jobs on the cluster.
+
+   =slurm.el= defines several views to present SLURM information. Each view first presents the
+   command line which could be manually used to obtain the information presented below.
+
+   By default, the following keys can be used to switch between the different views:
+   - =j=: jobs list (this is the default view)
+   - =p=: partitions list
+   - =i=: cluster information
+
+   In any view, the =g= key refreshes the display.
+
+
+*** Jobs list
+
+    This view displays the list of all jobs managed by SLURM on the cluster, as obtained with the
+    =squeue= command.
+
+    A few operations can be done from this view :
+
+    - =d= or =RET=: show job (d)etails. ::
+      This presents information on the current job, as obtained with the command:
+      #+begin_src sh
+        scontrol show job JOBID
+      #+end_src
+
+    - =U=: show (u)ser details on the job submitter. ::
+      It presents the information obtained by the command:
+      #+begin_src sh
+        finger USER
+      #+end_src
+
+    - =k=: (k)ill job. ::
+
+      This command cancels the current job by running the following command:
+      #+begin_src sh
+        scancel JOBID
+      #+end_src
+
+    - =e= or =u=: (e)dit or (u)pdate job. ::
+      In this mode, job submission parameters can be interactively updated. This operation is
+      internally done using the command
+      #+begin_src sh
+        scontrol update job JOBID ...
+      #+end_src
+
+      Each parameter is presented on its own line. After editing a line, press
+      - =C-c C-c= to validate you change (on the current line only), or
+      - =C-c C-q= to cancel your changes and return to the previous view.
+
+    - =/=: filter the jobs list. ::
+      The jobs list can be filtered by:
+      - =u=: user;
+      - =p=: partition.
+
+    - =s=: (s)ort the jobs list. ::
+      The jobs list can be sorted by:
+      - =u=: user;
+      - =p=: partition;
+      - =P=: job priority;
+      - =d=: use the default sorting order;
+      - =c=: customize sorting order by specifying a suitable argument for the =-S= switch of =squeue=.
+
+      Giving this command a prefix argument reverses the sorting order. For example, press =C-u s u=
+      to sort by user in reverse alphabetical order.
+
+*** Partitions list
+
+    This view displays a list of all partitions on the cluster, as obtained with the =scontrol show
+    partition= command.
+
+    While in this view, pressing =d= or =RET= allows you to access various details about the current
+    partition state, as obtained with the =sinfo= command.
+
+*** Cluster information
+
+    This view displays details on the current cluster state, as obtained with the =sinfo= command.
+
+
+** Customization
+
+   Some variables can be set to customize =slurm-mode='s behaviour:
+
+   - variable =slurm-display-help=: if non-nil, =slurm-mode= displays an help message at the top of the
+     screen;
+
+   - variable =slurm-filter-user-at-start=: if non-nil, the initial jobs list is filtered to show only jobs
+     owned by the current user.
+
+
+* Contributing
+
+  If you make improvements to this code or have suggestions, please do not hesitate to fork the
+  repository or submit bug reports on [[https://github.com/ffevotte/slurm.el][github]]. The repository's
+  URL is:
+
+  https://github.com/ffevotte/slurm.el.git
+
+
+  =slurm-script-mode.el= originally comes from the [[https://github.com/damienfrancois/slurm-helper/blob/master/slurm-mode.el][slurm-helper]] project by Damien François.
+
+* License
+
+  Copyright (C) 2012 François Févotte, Damien François
+
+  This program is free software: you can redistribute it and/or modify it under the terms of the GNU
+  General Public License as published by the Free Software Foundation, either version 3 of the
+  License, or (at your option) any later version.
+
+  This program is distributed in the hope that it will be useful, but WITHOUT ANY WARRANTY; without
+  even the implied warranty of MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+  General Public License for more details.
+
+  You should have received a copy of the GNU General Public License along with this program.  If
+  not, see <http://www.gnu.org/licenses/>.
+
