@@ -1,4 +1,4 @@
-;;; slurm.el --- interaction with the SLURM job scheduling system
+;;; slurm-mode.el --- interaction with the SLURM job scheduling system
 
 ;; Copyright (C) 2012 François Févotte
 
@@ -27,15 +27,18 @@
 
 ;;; Code:
 
+;;;###autoload
 (defgroup slurm nil
   "Interacting with the SLURM jobs scheduling system."
   :group 'external)
 
+;;;###autoload
 (defcustom slurm-display-help t
   "If non-nil, slurm-mode should display an help message at the top of the screen."
   :group 'slurm
   :type 'boolean)
 
+;;;###autoload
 (defcustom slurm-filter-user-at-start t
   "If non-nil, the jobs list is filtered by user at start."
   :group 'slurm
@@ -462,6 +465,6 @@ Key bindings:
     (switch-to-buffer "*slurm*")
     (slurm-refresh)))
 
-(provide 'slurm)
+(provide 'slurm-mode)
 
-;; slurm.el ends here
+;; slurm-mode.el ends here

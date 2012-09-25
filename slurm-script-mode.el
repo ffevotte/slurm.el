@@ -32,11 +32,13 @@
 
 ;;; Code:
 
+;;;###autoload
 (defcustom slurm-script-directives-face 'slurm-script-directives
   "Face name to use for SBATCH directives in SLURM job submission scripts."
   :group 'slurm
   :type 'face)
 
+;;;###autoload
 (defface slurm-script-directives nil
   "Face to use for SBATCH directives in SLURM job submission scripts."
   :group 'slurm)
@@ -68,7 +70,7 @@
 (defvar slurm-script-directives-re
   (concat "^\\s *\\(#SBATCH\\s +--"
           (regexp-opt slurm-script-keywords)
-          "\\s +.*\\)$")
+          "\\b.*\\)$")
   "Regular expression matching SBATCH directives in a SLURM job
   submission script.")
 
