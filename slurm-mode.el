@@ -70,7 +70,7 @@
     (define-key slurm-mode-map (kbd "i")   'slurm-cluster-info)
     (define-key slurm-mode-map (kbd "g")   'slurm-refresh)
     (define-key slurm-mode-map (kbd "RET") 'slurm-details)
-    (define-key slurm-mode-map (kbd "d")   'slurm-details)
+    (define-key slurm-mode-map (kbd "d")   'slurm-job-cancel)
     (define-key slurm-mode-map (kbd "k")   'slurm-job-cancel)
     (define-key slurm-mode-map (kbd "u")   'slurm-job-update)
     (define-key slurm-mode-map (kbd "e")   'slurm-job-update)
