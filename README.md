@@ -1,82 +1,124 @@
 # slurm.el
 
-`slurm.el` is an Emacs extension allowing interaction with the
+`slurm.el` is an Emacs extension allowing to work more easily with the
 [SLURM](https://computing.llnl.gov/linux/slurm/) job scheduling system.
 
+It is composed of two parts:
 
-## Basic usage
+1. `slurm-script-mode`: a minor mode to edit job submission scripts;
+2. `slurm-mode`: a major mode allowing interaction with SLURM.
+
+
+
+## Installation
+
+Just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
+
+    (add-to-list 'load-path "/path/to/slurm.el")
+    (require 'slurm)
+
+
+
+## `slurm-script-mode`
+
+`slurm-script-mode` is automatically activated for shell-scripts containing `#SBATCH` directives. It
+can also be manually toggled by running `M-x slurm-script-mode`.
+
+While in this mode, `#SBATCH` directives are highlighted. New directives can also be easily inserted
+using the `C-c C-d` binding, which proposes completion on the keywords.
+
+
+
+## `slurm-mode`
+
+### Basic usage
 
 Just run `M-x slurm` to see a list of all SLURM jobs on the cluster.
 
-`slurm.el` defines several views to present SLURM information. By default, the following keys can be
-used to switch between them :
+`slurm.el` defines several views to present SLURM information. Each view first presents the command
+line which have been used to obtain the information presented.
 
-- `j`: jobs list (this is the default view)
-- `p`: partitions list
-- `i`: cluster information
+In all views, the following bindings are available:
 
-In any view, the `g` key refreshes the display.
+- `h`: show **h**elp
+- `g`: refresh view
 
-### Jobs list
+   
+#### Views
+
+The following key bindings can be used to switch between views:
+
+- `j`: **j**obs list (default view)
+- `p`: **p**artitions list
+- `i`: cluster **i**nformation
+
+
+#### Jobs list
 
 This view displays the list of all jobs managed by SLURM on the cluster, as obtained with the
 `squeue` command.
 
-A few operations can be done from this view :
+The jobs list can be manipulated using the following bindings:
 
-- `d` or `RET`: show job details.
+- `/`: filter the jobs list by:
+  - `u`: **u**ser;
+  - `p`: **p**artition.
 
-  This presents information on the current job, as obtained with the `scontrol show job JOBID`
-  command.
+- `s`: sort the jobs list by:
+  - `u`: **u**ser;
+  - `p`: **p**artition;
+  - `P`: job **p**riority;
+  - `d`: use the **d**efault sorting order;
+  - `c`: **c**ustomize sorting order by specifying a suitable argument for the `-S` switch of `squeue`.
 
-- `U`: show user details on the job submitter.
+  Giving this command a prefix argument reverses the sorting order. For example, `C-u s u` sorts by
+  user in reverse alphabetical order.
 
-- `k`: kill (cancel) job.
 
-   This command cancels the current job by running the `scancel JOBID` command.
+A few operations can be done from this view:
 
-- `e` or `u`: edit (update) job.
+- `RET`: show job details, as obtained with the `scontrol show job JOBID` command.
 
-   In this mode, you can update job submission parameters (as could be done using the `scontrol
-   update job JOBID` command). Each parameter is presented on its own line. After editing a line,
-   press
-   - `C-c C-c` to validate you change (on the current line only), or
-   - `C-c C-q` to cancel your changes and return to the previous view.
+- `U`: show **u**ser details on the job submitter (using the `finger USER` command).
 
-- `/`: filter the jobs list by
-  - `u`: user;
-  - `p`: partition.
+- `k` or `d`: **k**ill job by issuing the `scancel JOBID` command.
 
-- `s`: sort the jobs list by
-  - `u`: user;
-  - `p`: partition;
-  - `d`: use the default sorting order;
-  - `c`: customize sorting order by specifying a suitable argument for the `-S` switch of `squeue`.
+- `e` or `u`: **e**dit (or **u**pdate) job.
 
-  Pass the sorting command a prefix argument to reverse the order.
+   In this mode, job submission parameters can be interactively updated (as could be done using the
+   `scontrol update job JOBID` command). Each parameter is presented on its own line. After editing
+   a line, pressing
+   - `C-c C-c` validates the changes (on the current line only), or
+   - `C-c C-q` cancels the changes and returns to the previous view.
 
-### Partitions list
+
+#### Partitions list
 
 This view displays a list of all partitions on the cluster, as obtained with the `scontrol show
 partition` command.
 
-While in this view, pressing `d` or `RET` allows you to access various details about the current
-partition state, as obtained with the `sinfo` command.
+While in this view, pressing `RET` allows you to access various details about the selected partition
+state, as obtained using the `sinfo` command.
 
-### Cluster information
+#### Cluster information
 
 This view displays details on the current cluster state, as obtained with the `sinfo` command.
 
 
-## Customization
+### Customization
 
-Some variables can be set to customize `slurm.el`'s behaviour:
+Some variables can be set to customize `slurm-mode`'s behaviour:
 
-- variable `slurm-display-help`: if non-nil, `slurm-mode` displays an help message at the top of the
+- `slurm-display-help`: if non-nil, `slurm-mode` displays an help message at the top of the
   screen;
 
-- variable `slurm-filter-user-at-start`: if non-nil, the initial jobs list is filtered to show only jobs
+- `slurm-filter-user-at-start`: if non-nil, the initial jobs list is filtered to show only jobs
   owned by the current user.
+
+- `slurm-script-directive-face`: face name to use for `#SBATCH` directives in job submission
+  scripts.
+  
+All these variables can be customized via `M-x customize-group RET slurm RET`.
 
 
 ## Contributing
@@ -86,10 +128,14 @@ repository or submit bug reports on [github](https://github.com/ffevotte/slurm.e
 URL is:
 
     https://github.com/ffevotte/slurm.el.git
+    
+`slurm-script-mode.el` originally comes from the
+[slurm-helper](https://github.com/damienfrancois/slurm-helper/blob/master/slurm-mode.el) project by
+Damien François.
 
 ## License
 
-Copyright (C) 2012 François Févotte
+Copyright (C) 2012 François Févotte, Damien François.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU
 General Public License as published by the Free Software Foundation, either version 3 of the
