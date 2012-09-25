@@ -2,6 +2,8 @@
 
 ;; Copyright (C) 2012 François Févotte
 
+;; This file is NOT part of Emacs.
+
 ;; This program is free software: you can redistribute it and/or modify
 ;; it under the terms of the GNU General Public License as published by
 ;; the Free Software Foundation, either version 3 of the License, or
@@ -165,7 +167,9 @@ Customization variables:
        (lambda (&optional ignore-auto noconfirm) (slurm-refresh)))
   (set (make-local-variable 'buffer-stale-function)
        #'(lambda (&optional noconfirm) 'fast))
-  (set (make-local-variable 'auto-revert-interval) 30))
+  (set (make-local-variable 'auto-revert-interval) 30)
+  (when (fboundp 'auto-revert-set-timer)
+    (auto-revert-set-timer)))
 
 
 
