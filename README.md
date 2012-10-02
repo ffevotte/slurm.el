@@ -14,9 +14,10 @@ It is composed of two parts:
 
 Just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
 
-    (add-to-list 'load-path "/path/to/slurm.el")
-    (require 'slurm)
-
+```lisp
+(add-to-list 'load-path "/path/to/slurm.el")
+(require 'slurm)
+```
 
 
 ## `slurm-script-mode`
@@ -26,7 +27,6 @@ can also be manually toggled by running `M-x slurm-script-mode`.
 
 While in this mode, `#SBATCH` directives are highlighted. New directives can also be easily inserted
 using the `C-c C-d` binding, which proposes completion on the keywords.
-
 
 
 ## `slurm-mode`
@@ -43,7 +43,7 @@ In all views, the following bindings are available:
 - `h`: show **h**elp
 - `g`: refresh view
 
-   
+
 #### Views
 
 The following key bindings can be used to switch between views:
@@ -100,6 +100,7 @@ partition` command.
 While in this view, pressing `RET` allows you to access various details about the selected partition
 state, as obtained using the `sinfo` command.
 
+
 #### Cluster information
 
 This view displays details on the current cluster state, as obtained with the `sinfo` command.
@@ -117,7 +118,7 @@ Some variables can be set to customize `slurm-mode`'s behaviour:
 
 - `slurm-script-directive-face`: face name to use for `#SBATCH` directives in job submission
   scripts.
-  
+
 All these variables can be customized via `M-x customize-group RET slurm RET`.
 
 
@@ -128,14 +129,15 @@ repository or submit bug reports on [github](https://github.com/ffevotte/slurm.e
 URL is:
 
     https://github.com/ffevotte/slurm.el.git
-    
-`slurm-script-mode.el` originally comes from the
-[slurm-helper](https://github.com/damienfrancois/slurm-helper/blob/master/slurm-mode.el) project by
-Damien François.
+
 
 ## License
 
-Copyright (C) 2012 François Févotte, Damien François.
+Copyright (C) 2012 François Févotte.
+
+`slurm-script-mode.el` originally comes from the
+[slurm-helper](https://github.com/damienfrancois/slurm-helper/blob/master/slurm-mode.el) and is (C)
+Damien François.
 
 This program is free software: you can redistribute it and/or modify it under the terms of the GNU
 General Public License as published by the Free Software Foundation, either version 3 of the
