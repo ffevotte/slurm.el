@@ -25,8 +25,13 @@ Just put the following lines in your Emacs initialization file (`.emacs` or `.em
 `slurm-script-mode` is automatically activated for shell-scripts containing `#SBATCH` directives. It
 can also be manually toggled by running `M-x slurm-script-mode`.
 
-While in this mode, `#SBATCH` directives are highlighted. New directives can also be easily inserted
-using the `C-c C-d` binding, which proposes completion on the keywords.
+While in this mode, `#SBATCH` directives are highlighted and some basic errors are detected (unknown
+or misspelled keywords, unproperly quoted arguments, ...)
+
+New directives can also be easily inserted using the `C-c C-d` binding, which proposes completion
+on the keywords.
+
+![Example of slurm-script-mode](slurm-script-mode.png)
 
 
 ## `slurm-mode`
