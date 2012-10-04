@@ -44,7 +44,13 @@
   :group 'slurm)
 (copy-face 'font-lock-type-face 'slurm-script-directives)
 
-(defvar slurm-script-keywords
+(defvar slurm-script-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "C-c C-d") 'slurm-script-insert-directive)
+    map)
+  "Keymap for `slurm-script-mode'.")
+
+(defconst slurm-script-keywords
   '("account"         "acctg-freq"        "begin"           "checkpoint"   "checkpoint-dir"
     "comment"         "constraint"        "constraint"      "contiguous"   "cores-per-socket"
     "cpu-bind"        "cpus-per-task"     "dependency"      "distribution" "error"
@@ -61,18 +67,10 @@
     "wckey"           "workdir"           "wrap")
   "List of allowed SBATCH keywords in SLURM submission scripts.")
 
-(defvar slurm-script-mode-map
-  (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "C-c C-d") 'slurm-script-insert-directive)
-    map)
-  "Keymap for `slurm-script-mode'.")
-
-(defvar slurm-script-directives-re
-  (concat "^\\s *\\(#SBATCH\\s +--"
-          (regexp-opt slurm-script-keywords)
-          "\\b.*\\)$")
-  "Regular expression matching SBATCH directives in a SLURM job
-  submission script.")
+(defconst slurm-script-keywords-re
+  (concat "--" (regexp-opt slurm-script-keywords) "\\b")
+  "Regular expression matching SBATCH keywords in a SLURM job
+submission script.")
 
 (defun slurm-script-insert-directive (keyword)
   "Interactively insert a SLURM directive of the form:
@@ -83,6 +81,44 @@
    (list (completing-read "Keyword: "
                           slurm-script-keywords nil t)))
   (insert (concat "#SBATCH --" keyword " ")))
+
+(defun slurm-search-directive-1 (limit)
+  "Search for the next #SBATCH directive.
+
+Returns:
+- nil    if no SBATCH directives are found
+- error  if the following SBATCH directive is malformed
+- an integer corresponding to the point position of the next SBATCH
+   directive beginning if it is found and well-formed."
+
+  ;; Find #SBATCH directive
+  (when (re-search-forward "^\\s *#SBATCH\\b" limit t)
+    (let ((beg (match-beginning 0)))
+
+      ;; Find SBATCH keyword
+      (if (re-search-forward (concat "\\=\\s +" slurm-script-keywords-re "\\s *") limit t)
+          ;; Try to move point to the end of the argument
+          (progn
+            (cond
+             ;; No argument: end of line or beginning of comment
+             ((looking-at "\\(\\s<\\|$\\)")
+              t)
+             ;; Quoted argument
+             ((looking-at "\\s\"")
+              (forward-sexp))
+             ;; Unquoted argument
+             (t
+              (re-search-forward "\\=[^[:space:]#\n]+" limit t)))
+            beg)
+        'error))))
+
+(defun slurm-search-directive (limit)
+  (let (beg)
+    (save-match-data
+      (while (eq (setq beg (slurm-search-directive-1 limit)) 'error) t))
+    (unless (null beg)
+      (set-match-data (list beg (point)))
+      t)))
 
 ;;;###autoload
 (define-minor-mode slurm-script-mode
@@ -96,7 +132,8 @@ This mode also provides a command to insert new SBATCH directives :
   :lighter " slurm"
   :group 'slurm
   :keymap slurm-script-mode-map
-  (let ((kwlist `((,slurm-script-directives-re 1 slurm-script-directives-face t))))
+  (let ((kwlist `(("^\\s *\\(#SBATCH[^#\n]*\\)\\s *\\(#.*\\)?$" 1 font-lock-warning-face t)
+                  (slurm-search-directive 0 slurm-script-directives-face t))))
     (if slurm-script-mode
         (font-lock-add-keywords nil kwlist)
       (font-lock-remove-keywords nil kwlist))))
@@ -107,7 +144,7 @@ This mode also provides a command to insert new SBATCH directives :
   (interactive)
   (save-excursion
     (goto-char (point-min))
-    (when (re-search-forward slurm-script-directives-re nil t)
+    (when (slurm-search-directive (point-max))
       (slurm-script-mode 1))))
 
 (provide 'slurm-script-mode)
