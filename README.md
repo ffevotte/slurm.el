@@ -31,7 +31,7 @@ or misspelled keywords, unproperly quoted arguments, ...)
 New directives can also be easily inserted using the `C-c C-d` binding, which proposes completion
 on the keywords.
 
-![Example of slurm-script-mode](https://github.com/ffevotte/slurm.el/blob/master/slurm-script-mode.png)
+![Example of slurm-script-mode](http://ffevotte.github.com/slurm.el/slurm-script-mode.png)
 
 
 ## `slurm-mode`
