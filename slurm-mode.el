@@ -80,6 +80,7 @@
     (define-key slurm-mode-map (kbd "s u") 'slurm-sort-user)
     (define-key slurm-mode-map (kbd "s p") 'slurm-sort-partition)
     (define-key slurm-mode-map (kbd "s P") 'slurm-sort-priority)
+    (define-key slurm-mode-map (kbd "s j") 'slurm-sort-jobname)
     (define-key slurm-mode-map (kbd "s d") 'slurm-sort-default)
     (define-key slurm-mode-map (kbd "s c") 'slurm-sort)))
 
@@ -120,6 +121,7 @@ Manipulations of the jobs list:
   \\[slurm-filter-partition] - Filter jobs by partition.
   \\[slurm-sort-user] - Sort jobs by user name.
   \\[slurm-sort-partition] - Sort jobs by partition.
+  \\[slurm-sort-jobname] - Sort jobs by job/step name.
   \\[slurm-sort-default] - Default jobs sorting order.
   \\[slurm-sort] - Customize jobs sorting order.
 
@@ -265,32 +267,18 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
                               (format "-S '%s'" slurm-sort)))
     (when slurm-initialized (slurm-job-list))))
 
-(defun slurm-sort-user (&optional argp)
-  "Sort slurm jobs by user name.
-
-Give a prefix argument to reverse the sorting order."
-  (interactive "P")
-  (if argp
-      (slurm-sort "-u")
-    (slurm-sort "u")))
-
-(defun slurm-sort-partition (&optional argp)
-  "Sort slurm jobs by partition.
-
-Give a prefix argument to reverse the sorting order."
-  (interactive "P")
-  (if argp
-      (slurm-sort "-P")
-    (slurm-sort "P")))
-
-(defun slurm-sort-priority (&optional argp)
-  "Sort slurm jobs by priority.
-
-Give a prefix argument to reverse the sorting order."
-  (interactive "P")
-  (if argp
-      (slurm-sort "-p")
-    (slurm-sort "p")))
+(defmacro slurm-define-sort (name char)
+  `(defun ,(intern (concat "slurm-sort-" name)) (&optional argp)
+     ,(concat "Sort slurm jobs by " name ".\n\n"
+              "Give a prefix argument to reverse the sorting order.")
+     (interactive "P")
+     (if argp
+         (slurm-sort ,(concat "-" char))
+       (slurm-sort ,char))))
+(slurm-define-sort "user"      "u")
+(slurm-define-sort "partition" "P")
+(slurm-define-sort "priority"  "p")
+(slurm-define-sort "jobname"   "j")
 
 (defun slurm-sort-default ()
   "Revert to default slurm jobs sorting order."
