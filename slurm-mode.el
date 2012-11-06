@@ -96,6 +96,12 @@
 (defvar slurm-sort-switch)
 (defvar slurm-jobid)
 
+;; WARNING: `slurm--user-column' must be updated when `slurm--jobslist-format' changes
+(defconst slurm--jobslist-format "-o '%.7i %9P %37j %8u %2t %.4M %.5D %.4Q %40R'"
+  "Formatting switch to be used when displayign the jobs list.")
+(defconst slurm--user-column 56
+  "Column at which the user-name is defined in the jobs list.")
+
 (defun slurm-mode ()
   "Major-mode for interacting with slurm.
 
@@ -185,8 +191,7 @@ Customization variables:
   "Switch to slurm jobs list view."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (let ((format-switch "-o '%.7i %9P %30j %8u %2t %.10M %.5D %.5Q %40R'"))
-      (setq slurm-command (format "squeue %s %s %s %s" format-switch slurm-user-switch slurm-partition-switch slurm-sort-switch)))
+    (setq slurm-command (format "squeue %s %s %s %s" slurm--jobslist-format slurm-user-switch slurm-partition-switch slurm-sort-switch))
     (setq mode-name "Slurm (jobs list)")
     (setq slurm-view 'slurm-job-list)
     (slurm-refresh)))
@@ -300,13 +305,12 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
         (t                                  (error "Bad context for slurm-job-id"))))
 
 (defun slurm-job-user ()
-  (let ((user-col 49))
-    (save-excursion
-      (beginning-of-line)
-      (move-to-column user-col)
-      (let ((begin (point)))
-        (forward-word)
-        (buffer-substring begin (point))))))
+  (save-excursion
+    (beginning-of-line)
+    (move-to-column slurm--user-column)
+    (let ((begin (point)))
+      (forward-word)
+      (buffer-substring begin (point)))))
 
 (defun slurm-job-user-details ()
   "Display details on the jub submitter, as returned by the shell `finger' utility."
