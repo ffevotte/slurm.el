@@ -54,7 +54,9 @@
   "Open a slurm-mode buffer to manage jobs."
   (interactive)
   (switch-to-buffer (get-buffer-create "*slurm*"))
-  (slurm-mode))
+  (if (eq major-mode 'slurm-mode)
+      (slurm-refresh)
+    (slurm-mode)))
 
 
 (defvar slurm-mode-map nil
