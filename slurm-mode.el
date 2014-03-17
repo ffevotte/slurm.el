@@ -99,9 +99,9 @@
 (defvar slurm-jobid)
 
 ;; WARNING: `slurm--user-column' must be updated when `slurm--jobslist-format' changes
-(defconst slurm--jobslist-format "-o '%.7i %9P %37j %8u %2t %.4M %.5D %.4Q %40R'"
+(defconst slurm--jobslist-format "-o '%.9i %9P %37j %8u %2t %.4M %.5D %.4Q %40R'"
   "Formatting switch to be used when displayign the jobs list.")
-(defconst slurm--user-column 56
+(defconst slurm--user-column 58
   "Column at which the user-name is defined in the jobs list.")
 
 (defun slurm-mode ()
