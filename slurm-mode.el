@@ -21,11 +21,18 @@
 ;;; Commentary:
 
 ;; If you make improvements to this code or have suggestions, please do not hesitate to fork the
-;; repository or submit bug reports on github. The repository is at:
+;; repository or submit bug reports on github.  The repository is at:
 ;;
 ;;     https://github.com/ffevotte/slurm.el
 
 ;;; Code:
+
+
+(require 'dash)
+(require 's)
+
+
+;; * Customizable variables
 
 ;;;###autoload
 (defgroup slurm nil
@@ -44,10 +51,136 @@
   :group 'slurm
   :type 'boolean)
 
+;;;###autoload
+(defcustom slurm-squeue-format
+  '((jobid      9 right)
+    (partition  9 left)
+    (name      37 left)
+    (user       8 left)
+    (st         2 left)
+    (time      10 right)
+    (nodes      4 right)
+    (priority   4 right)
+    (nodelist  40 left))
+  "List of fields to display in the jobs list.
 
-;;;;;;;;;;;;;;;;
-;; slurm mode ;;
-;;;;;;;;;;;;;;;;
+Each entry in the list should be of the form:
+  (FIELD WIDTH ALIGNMENT)
+where:
+FIELD is a symbol whose name corresponds to the column title in
+      the squeue output.
+WIDTH is an integer setting the column width.
+ALIGN is either `left' or `right'."
+  :group 'slurm
+  :type  '(alist
+           :key-type   (symbol :tag "Field")
+           :value-type (group (integer :tag "Width")
+                              (choice  :tag "Alignment"
+                                       (const left)
+                                       (const right)))))
+
+
+;; * Utilities
+
+;; ** Process management
+
+(defvar slurm--buffer)
+(defmacro slurm--start-process (&rest args)
+  "Start an asynchronous process.
+
+ARGS is a plist containing the following entries:
+
+:command (required) - the command to run, as a list.
+
+:pre (optional) - form to be executed in the process buffer
+  before it is run.
+
+:post-slurm (optional) - form to be executed asynchronously in
+  the slurm buffer (i.e. the buffer from which
+  `slurm--start-process' is called) after completion of the
+  process.
+
+:post-process (optional) - form to be executed asynchronously in
+  the process buffer after completion.  A buffer-local
+  `slurm--buffer' variable is set there, pointing the the slurm
+  buffer (i.e. the buffer from which `slurm--start-process' was
+  called).
+
+:current-buffer (optional) - if non-nil, dont create a specific
+  buffer-process; use the current buffer instead."
+  (let* ((command        (plist-get args :command))
+         (pre            (plist-get args :pre))
+         (post-slurm     (plist-get args :post-slurm))
+         (post-process   (plist-get args :post-process))
+         (current-buffer (plist-get args :current-buffer))
+
+         (buffer-sym   (make-symbol "buffer"))
+         (command-sym  (make-symbol "command"))
+         (process-sym  (make-symbol "process"))
+         (event-sym    (make-symbol "event")))
+    `(progn
+       (let* ((,command-sym ,command)
+              (,buffer-sym  ,(if current-buffer
+                                 `(current-buffer)
+                               `(get-buffer-create (format "*slurm %s*" (car ,command-sym))))))
+         (let ((slurm-buffer (current-buffer)))
+           (with-current-buffer ,buffer-sym
+             (set (make-local-variable 'slurm--buffer)
+                  slurm-buffer)))
+         (with-current-buffer (get-buffer-create ,buffer-sym)
+           ,pre)
+         (set-process-sentinel
+          (apply 'start-file-process
+                 (car ,command-sym)
+                 ,buffer-sym
+                 ,command-sym)
+          #'(lambda (,process-sym ,event-sym)
+              (with-current-buffer (process-buffer ,process-sym)
+                ,post-process
+                (with-current-buffer slurm--buffer
+                  ,post-slurm))))))))
+
+
+;; ** Internal state management
+
+(defvar slurm--state nil
+  "Internal state of slurm.")
+
+;; -- global
+;;
+;; :initialized      - if non-nil filters and sort will refresh the view
+;; :command          - list of commands actually displayed on the view
+;; :running-commands - list of commands currently being executed
+;; :view             - name of the current view
+;; :partitions       - list of available partitions
+;; :old-position     - current position just before refreshing a view. Will try
+;;                     to go back there after refreshing.
+;; :message          - message to be displayed after command completion
+
+;; -- specific to the jobs list
+;;
+;; :filter-user      - user to filter in the jobs list ("" for no filter)
+;; :filter-partition - partition to filter in the jobs list ("*ALL*" for no filter)
+;; :sort             - sorting order ("" for the default sorting order)
+
+;; -- specific to the detailed job view
+;;
+;; :jobid - current job id
+
+(defun slurm--get (key)
+  "Get surm internal variable value associated to KEY."
+  (plist-get slurm--state key))
+
+(defun slurm--set (key value)
+  "Set the SLURM internal variable associated to KEY.
+Assign it the new value VALUE."
+  (setq slurm--state
+        (plist-put slurm--state key value)))
+
+
+;; * Slurm mode
+
+;; ** Mode definition
 
 ;;;###autoload
 (defun slurm ()
@@ -59,50 +192,34 @@
     (slurm-mode)))
 
 
-(defvar slurm-mode-map nil
-  "keymap for slurm-mode.")
-(if slurm-mode-map ()
-  (progn
-    (setq slurm-mode-map (make-sparse-keymap))
-    (suppress-keymap slurm-mode-map)
-    (define-key slurm-mode-map (kbd "h")   'describe-mode)
-    (define-key slurm-mode-map (kbd "?")   'describe-mode)
-    (define-key slurm-mode-map (kbd "j")   'slurm-job-list)
-    (define-key slurm-mode-map (kbd "p")   'slurm-partition-list)
-    (define-key slurm-mode-map (kbd "i")   'slurm-cluster-info)
-    (define-key slurm-mode-map (kbd "g")   'slurm-refresh)
-    (define-key slurm-mode-map (kbd "RET") 'slurm-details)
-    (define-key slurm-mode-map (kbd "d")   'slurm-job-cancel)
-    (define-key slurm-mode-map (kbd "k")   'slurm-job-cancel)
-    (define-key slurm-mode-map (kbd "u")   'slurm-job-update)
-    (define-key slurm-mode-map (kbd "e")   'slurm-job-update)
-    (define-key slurm-mode-map (kbd "U")   'slurm-job-user-details)
-    (define-key slurm-mode-map (kbd "/ u") 'slurm-filter-user)
-    (define-key slurm-mode-map (kbd "/ p") 'slurm-filter-partition)
-    (define-key slurm-mode-map (kbd "s u") 'slurm-sort-user)
-    (define-key slurm-mode-map (kbd "s p") 'slurm-sort-partition)
-    (define-key slurm-mode-map (kbd "s P") 'slurm-sort-priority)
-    (define-key slurm-mode-map (kbd "s j") 'slurm-sort-jobname)
-    (define-key slurm-mode-map (kbd "s d") 'slurm-sort-default)
-    (define-key slurm-mode-map (kbd "s c") 'slurm-sort)))
+(defvar slurm-mode-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "h")   'describe-mode)
+    (define-key map (kbd "?")   'describe-mode)
+    (define-key map (kbd "j")   'slurm-job-list)
+    (define-key map (kbd "p")   'slurm-partition-list)
+    (define-key map (kbd "i")   'slurm-cluster-info)
+    (define-key map (kbd "g")   'slurm-refresh)
+    (define-key map (kbd "RET") 'slurm-details)
+    (define-key map (kbd "d")   'slurm-job-cancel)
+    (define-key map (kbd "k")   'slurm-job-cancel)
+    (define-key map (kbd "u")   'slurm-job-update)
+    (define-key map (kbd "e")   'slurm-job-update)
+    (define-key map (kbd "U")   'slurm-job-user-details)
+    (define-key map (kbd "/ u") 'slurm-filter-user)
+    (define-key map (kbd "/ p") 'slurm-filter-partition)
+    (define-key map (kbd "s u") 'slurm-sort-user)
+    (define-key map (kbd "s p") 'slurm-sort-partition)
+    (define-key map (kbd "s P") 'slurm-sort-priority)
+    (define-key map (kbd "s j") 'slurm-sort-jobname)
+    (define-key map (kbd "s d") 'slurm-sort-default)
+    (define-key map (kbd "s c") 'slurm-sort)
+    map)
+  "Keymap for slurm-mode.")
 
-(defvar slurm-initialized)
-(defvar slurm-command)
-(defvar slurm-view)
-(defvar slurm-partitions)
-(defvar slurm-user)
-(defvar slurm-user-switch)
-(defvar slurm-partition)
-(defvar slurm-partition-switch)
-(defvar slurm-sort)
-(defvar slurm-sort-switch)
-(defvar slurm-jobid)
 
-;; WARNING: `slurm--user-column' must be updated when `slurm--jobslist-format' changes
-(defconst slurm--jobslist-format "-o '%.9i %9P %37j %8u %2t %.4M %.5D %.4Q %40R'"
-  "Formatting switch to be used when displayign the jobs list.")
-(defconst slurm--user-column 58
-  "Column at which the user-name is defined in the jobs list.")
+(eval-when-compile
+  (defvar auto-revert-interval))
 
 (defun slurm-mode ()
   "Major-mode for interacting with slurm.
@@ -131,48 +248,34 @@ Manipulations of the jobs list:
   \\[slurm-sort-partition] - Sort jobs by partition.
   \\[slurm-sort-jobname] - Sort jobs by job/step name.
   \\[slurm-sort-default] - Default jobs sorting order.
-  \\[slurm-sort] - Customize jobs sorting order.
-
-Customization variables:
-  (setq slurm-display-help nil)         ;; avoid displaying the help message at the top of each screen
-  (setq slurm-filter-user-at-start nil) ;; show all jobs at start
-"
+  \\[slurm-sort] - Customize jobs sorting order."
   (interactive)
   (kill-all-local-variables)
   (use-local-map slurm-mode-map)
   (setq mode-name "Slurm")
   (setq major-mode 'slurm-mode)
   (hl-line-mode 1)
+  (toggle-truncate-lines 1)
   (setq buffer-read-only t)
 
-  ;; As long as `slurm-initialized' is nil, filters and sort don't try to refresh the view
-  (set (make-local-variable 'slurm-initialized) nil)
+  (set (make-local-variable 'slurm--state) nil)
 
-  (set (make-local-variable 'slurm-command) nil)
-  (set (make-local-variable 'slurm-view) nil)
-  (set (make-local-variable 'slurm-user) (getenv "USER"))
-  (set (make-local-variable 'slurm-partitions) (slurm-list-partitions))
-  (make-local-variable 'slurm-jobid)
+  (slurm-init)
 
   ;; Initialize user filter
-  (make-local-variable 'slurm-user)
-  (make-local-variable 'slurm-user-switch)
   (if slurm-filter-user-at-start
-      (slurm-filter-user slurm-user)
+      (slurm-filter-user (getenv "USER"))
     (slurm-filter-user ""))
 
   ;; Initialize partition filter
-  (make-local-variable 'slurm-partition)
-  (make-local-variable 'slurm-partition-switch)
+  (slurm--update-partitions)
   (slurm-filter-partition "*ALL*")
 
   ;; Initialize sorting order
-  (make-local-variable 'slurm-sort)
-  (make-local-variable 'slurm-sort-switch)
   (slurm-sort "")
 
   ;; Draw display
-  (setq slurm-initialized t)
+  (slurm--set :initialized t) ; From now on, filters and sort will refresh the view
   (slurm-job-list)
 
   ;; Arrange for `revert-buffer' to call `slurm-refresh'
@@ -185,96 +288,206 @@ Customization variables:
     (auto-revert-set-timer)))
 
 
+;; ** Views
 
+(defun slurm--in-view (view)
+  "Non-nil if the current SLURM view is VIEW."
+  (eq (slurm--get :view) view))
 
-;; Views
+(defun slurm--run-one-command ()
+  "Run the next SLURM command.
+Schedule the following command to be executed after termination of the current one."
+  (let ((commands (slurm--get :running-commands)))
+    (when commands
+      (let ((command (car commands)))
+        (slurm--set :running-commands (cdr commands))
+        (setq buffer-read-only nil)
+        (goto-char (point-max))
+        (newline 3)
+        (let ((pos1 (point)))
+          (insert "> "
+                  (s-join " "
+                          (-map #'(lambda (arg) (format "'%s'" arg)) command)))
+          (add-text-properties pos1 (point) '(face ((:weight bold)))))
+        (newline 2)
+        (sit-for 0)
 
-(defun slurm-job-list ()
-  "Switch to slurm jobs list view."
-  (interactive)
-  (when (eq major-mode 'slurm-mode)
-    (setq slurm-command (format "squeue %s %s %s %s" slurm--jobslist-format slurm-user-switch slurm-partition-switch slurm-sort-switch))
-    (setq mode-name "Slurm (jobs list)")
-    (setq slurm-view 'slurm-job-list)
-    (slurm-refresh)))
-
-(defun slurm-partition-list ()
-  "Switch to slurm partitions list view."
-  (interactive)
-  (when (eq major-mode 'slurm-mode)
-    (setq slurm-command "scontrol show partition")
-    (setq mode-name "Slurm (partitions list)")
-    (setq slurm-view 'slurm-partition-list)
-    (slurm-refresh)))
+        (slurm--start-process
+         :pre
+         (progn
+           (slurm--set :message (format "Running %s..." (car command)))
+           (message "%s" (slurm--get :message)))
+         :current-buffer t
+         :command command
+         :post-process
+         (progn
+           (delete-trailing-whitespace)
+           (goto-char (point-min))
+           (forward-line (1- (slurm--get :old-position)))
+           (setq buffer-read-only t)
+           (set-buffer-modified-p nil)
+           (message "%s done." (slurm--get :message))
+           (slurm--run-one-command)))))))
 
 (defun slurm-refresh ()
   "Refresh current slurm view."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (let ((old-line (max (line-number-at-pos) 8))
-          commands)
-      (setq buffer-read-only nil)
-      (erase-buffer)
-      (shell-command "date" t)
-      (when slurm-display-help
-        (forward-line)(newline)
-        (insert "Type `h' to display an help message"))
-      (setq commands (if (listp slurm-command) slurm-command
-                       (list slurm-command)))
-      (dolist (command commands)
-        (goto-char (point-max))(newline 3)
-        (let ((pos1  (point)))
-          (insert "> " command)
-          (add-text-properties pos1 (point) '(face ((:weight bold)))))
-        (newline 2)
-        (shell-command command t))
-      (delete-trailing-whitespace)
-      (goto-char (point-min))(forward-line (1- old-line))
-      (setq buffer-read-only t)
-      (set-buffer-modified-p nil))))
+    (slurm--set :old-position (max (line-number-at-pos) 8))
+    (slurm--set :running-commands (slurm--get :command))
+    (setq buffer-read-only nil)
+    (erase-buffer)
+    (insert (format-time-string "%Y-%m-%d %H:%M:%S\n"))
+    (when slurm-display-help
+      (forward-line)(newline)
+      (insert "Type `h' to display an help message"))
+    (slurm--run-one-command)))
 
 (defun slurm-details ()
   "Show details on the current slurm entity (job or partition depending on the context)."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (if (eq slurm-view 'slurm-job-list)       (slurm-job-details))
-    (if (eq slurm-view 'slurm-partition-list) (slurm-partition-details))))
+    (if (slurm--in-view 'slurm-job-list)       (slurm-job-details))
+    (if (slurm--in-view 'slurm-partition-list) (slurm-partition-details))))
 
 
+;; *** Jobs list
 
-;; Slurm jobs list manipulation
+(defvar slurm--squeue-format-switch nil
+  "Switch passed to the squeue command to set columns format.")
+
+(defun slurm-job-list ()
+  "Switch to slurm jobs list view."
+  (interactive)
+  (when (eq major-mode 'slurm-mode)
+    (slurm--set :command `(("squeue"
+                            "-o" ,slurm--squeue-format-switch
+                            ,@(slurm--squeue-filter-user)
+                            ,@(slurm--squeue-filter-partition)
+                            ,@(slurm--squeue-sort))))
+    (setq mode-name "Slurm (jobs list)")
+    (slurm--set :view 'slurm-job-list)
+    (slurm-refresh)))
+
+
+;; **** Squeue output parsing
+
+(defconst slurm--squeue-format-fields
+  '((jobid     . "i")
+    (partition . "P")
+    (name      . "j")
+    (user      . "u")
+    (st        . "t")
+    (time      . "M")
+    (nodes     . "D")
+    (priority  . "Q")
+    (nodelist  . "R"))
+  "Mapping between squeue fields and the corresponding '%' type specifications.")
+
+(defvar slurm--squeue-format-columns nil
+  "Definition of columns in the squeue output.
+
+Must be updated using `slurm-init' whenever `slurm-squeue-format'
+is modified.")
+
+
+(defun slurm--map-squeue-format (fun)
+  "Helper function to walk the squeue format.
+
+FUN is called for each field specification in
+`slurm-squeue-format'.  It should have the following prototype:
+
+FUN (name width &optional align)"
+  (-map (lambda (field)
+          (apply fun field))
+        slurm-squeue-format))
+
+(defun slurm-init ()
+  "Update internal variables when `slurm-squeue-format' is changed.
+
+Updated variables are `slurm--squeue-format-columns' and
+`slurm--squeue-format-switch'."
+  (setq slurm--squeue-format-switch
+        (-reduce
+         (lambda (a b) (concat a " " b))
+         (slurm--map-squeue-format
+          (lambda (name width &optional align)
+            (let ((field (cdr (assq name slurm--squeue-format-fields)))
+                  (mod   (if (eq align 'right) "." "")))
+              (format "%%%s%d%s" mod width field))))))
+
+  (setq slurm--squeue-format-columns
+        (let ((pos 0))
+          (slurm--map-squeue-format
+           (lambda (name width &optional align)
+             (prog1
+                 (list name pos (+ pos width))
+               (setq pos (+ pos width 1))))))))
+
+(defun slurm--squeue-get-column (name)
+  "Get the value of the NAME column in the current line.
+
+Returned values are trimmed.  NAME must correspond to a field
+listed in `slurm-squeue-format'."
+  (let* ((column   (assq name slurm--squeue-format-columns))
+         (col-beg  (nth 1 column))
+         (col-end  (nth 2 column))
+         (line-beg (line-beginning-position)))
+    (s-trim (buffer-substring-no-properties
+             (+ line-beg col-beg)
+             (+ line-beg col-end)))))
+
+
+;; **** Filtering
 
 (defun slurm-filter-user (user)
-  "Filter slurm jobs by user."
-  (interactive (list (read-from-minibuffer "User name (blank for all)? " slurm-user)))
+  "Filter slurm jobs belonging to USER."
+  (interactive (list (read-from-minibuffer "User name (blank for all)? " (slurm--get :filter-user))))
   (when (eq major-mode 'slurm-mode)
-    (setq slurm-user user)
-    (setq slurm-user-switch (if (string= slurm-user "") ""
-                              (format "-u '%s'" slurm-user)))
-    (when slurm-initialized (slurm-job-list))))
+    (slurm--set :filter-user user)
+    (when (slurm--get :initialized) (slurm-job-list))))
+
+(defun slurm--squeue-filter-user ()
+  "Return the squeue switch to filter by user."
+  (unless (string= (slurm--get :filter-user) "")
+    (list "-u" (slurm--get :filter-user))))
+
 
 (defun slurm-filter-partition (partition)
-  "Filter slurm jobs by partition."
-  (interactive (list (completing-read "Partition name: " (append (list "*ALL*") slurm-partitions)
-                                      nil nil nil nil slurm-partition)))
+  "Filter slurm jobs assigned to PARTITION."
+  (interactive (list (completing-read "Partition name: " (append (list "*ALL*") (slurm--get :partitions))
+                                      nil nil nil nil (slurm--get :filter-partition))))
   (when (eq major-mode 'slurm-mode)
-    (setq slurm-partition partition)
-    (setq slurm-partition-switch (if (string= slurm-partition "*ALL*") ""
-                                   (format "-p '%s'" slurm-partition)))
-    (when slurm-initialized (slurm-job-list))))
+    (slurm--set :filter-partition partition)
+    (when (slurm--get :initialized) (slurm-job-list))))
+
+(defun slurm--squeue-filter-partition ()
+  "Return the squeue switch to filter by partition."
+  (unless (string= (slurm--get :filter-partition) "*ALL*")
+    (list "-p" (slurm--get :filter-partition))))
+
+
+;; **** Sorting
 
 (defun slurm-sort (arg)
   "Set a custom sorting order for slurm jobs.
 
 ARG must be in a form suitable to be passed as a '-S' switch to the squeue command (see `man squeue')."
-  (interactive (list (read-from-minibuffer "Sort by (blank for default)? " slurm-sort)))
+  (interactive (list (read-from-minibuffer "Sort by (blank for default)? " (slurm--get :sort))))
   (when (eq major-mode 'slurm-mode)
-    (setq slurm-sort arg)
-    (setq slurm-sort-switch (if (string= slurm-sort "") ""
-                              (format "-S '%s'" slurm-sort)))
-    (when slurm-initialized (slurm-job-list))))
+    (slurm--set :sort arg)
+    (when (slurm--get :initialized) (slurm-job-list))))
+
+(defun slurm--squeue-sort ()
+  "Return the squeue switch to sort."
+  (unless (string= (slurm--get :sort) "")
+    (list "-S" (slurm--get :sort))))
 
 (defmacro slurm-define-sort (name char)
+  "Define a command to change the slurm jobs sorting order.
+
+The command will be named after NAME, and corresponds to giving
+the CHAR argument to squeue's '-S' switch."
   `(defun ,(intern (concat "slurm-sort-" name)) (&optional argp)
      ,(concat "Sort slurm jobs by " name ".\n\n"
               "Give a prefix argument to reverse the sorting order.")
@@ -294,40 +507,51 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
 
 
 
-;; Slurm jobs manipulation
+;; **** Jobs manipulation
 
 (defun slurm-job-id ()
-  (beginning-of-line)
-  (cond ((eq slurm-view 'slurm-job-list)    (if (search-forward-regexp
-                                                 "^[[:space:]]*\\([[:digit:]]+\\)[[:space:]]"
-                                                 (line-end-position) t)
-                                                (match-string 1)
-                                              (error "Could not extract jobid on this line")))
-        ((eq slurm-view 'slurm-job-details) slurm-jobid)
-        (t                                  (error "Bad context for slurm-job-id"))))
+  "Return the slurm job id in the current context.
 
-(defun slurm-job-user ()
-  (save-excursion
-    (beginning-of-line)
-    (move-to-column slurm--user-column)
-    (let ((begin (point)))
-      (forward-word)
-      (buffer-substring begin (point)))))
+In the `slurm-job-list' view, this is the job displayed on the
+current line.  In the `slurm-job-details' view, this is the job
+currently being displayed."
+  (beginning-of-line)
+  (cond ((slurm--in-view 'slurm-job-list)
+         (let ((jobid (slurm--squeue-get-column 'jobid)))
+           (unless (string-match "^[[:digit:]]" jobid)
+             (error "Could not find valid job id on this line"))
+           jobid))
+        ((slurm--in-view 'slurm-job-details)
+         (slurm--get :jobid))
+        (t
+         (error "Bad context for slurm-job-id"))))
 
 (defun slurm-job-user-details ()
   "Display details on the jub submitter, as returned by the shell `finger' utility."
   (interactive)
-  (when (eq slurm-view 'slurm-job-list)
-    (shell-command (concat "finger " (slurm-job-user)))))
+  (when (slurm--in-view 'slurm-job-list)
+    (let ((user (slurm--squeue-get-column 'user)))
+      (slurm--start-process
+       :pre
+       (progn
+         (erase-buffer)
+         (message "Retrieving user details..."))
+       :command
+       `("finger" ,user)
+       :post-process
+       (progn
+         (message "Retrieving user details... done.")
+         (message "%s" (buffer-string)))))))
 
 (defun slurm-job-details ()
+  "Show details about the current SLURM job."
   (when (eq major-mode 'slurm-mode)
-    (when (eq slurm-view 'slurm-job-list)
+    (when (slurm--in-view 'slurm-job-list)
       (let ((jobid  (slurm-job-id)))
-        (setq slurm-command (format "scontrol show job %s" jobid))
-        (setq slurm-jobid   jobid))
+        (slurm--set :command `(("scontrol" "show" "job" ,jobid)))
+        (slurm--set :jobid   jobid))
       (setq mode-name "Slurm (job details)")
-      (setq slurm-view 'slurm-job-details)
+      (slurm--set :view 'slurm-job-details)
       (slurm-refresh))))
 
 (defun slurm-job-cancel ()
@@ -336,8 +560,16 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
   (when (eq major-mode 'slurm-mode)
     (let ((jobid (slurm-job-id)))
       (when (y-or-n-p (format "Really cancel job %s? " jobid))
-        (shell-command (format "scancel %s" jobid))
-        (slurm-refresh)))))
+        (slurm--start-process
+         :pre
+         (progn
+           (message "Cancelling job..."))
+         :command
+         `("scancel" ,jobid)
+         :post-slurm
+         (progn
+           (message "Cancelling job... done.")
+           (slurm-refresh)))))))
 
 (defun slurm-job-update ()
   "Edit (update) current slurm job."
@@ -346,57 +578,78 @@ ARG must be in a form suitable to be passed as a '-S' switch to the squeue comma
     (let ((jobid (slurm-job-id)))
       (switch-to-buffer (get-buffer-create (format "*slurm update job %s*" jobid)))
       (slurm-update-mode)
-      (setq slurm-command (format "scontrol show job '%s'" jobid))
+      (slurm--set :command `(("scontrol" "show" "job" ,jobid)))
       (slurm-update-refresh))))
 
 
+;; *** Partitions list
 
-;; Slurm partitions manipulation
+(defun slurm-partition-list ()
+  "Switch to slurm partitions list view."
+  (interactive)
+  (when (eq major-mode 'slurm-mode)
+    (slurm--set :command '(("scontrol" "show" "partition")))
+    (setq mode-name "Slurm (partitions list)")
+    (slurm--set :view 'slurm-partition-list)
+    (slurm-refresh)))
 
-(defun slurm-list-partitions ()
-  (let ((partitions nil))
-    (with-temp-buffer
-      (shell-command "scontrol show partition" (current-buffer))
-      (while (search-forward "PartitionName=" nil t)
-        (let ((beg (point)))
-          (forward-word)
-          (add-to-list 'partitions (buffer-substring beg (point))))))
-    partitions))
+
+
+;; **** Partitions manipulation
+
+(defun slurm--update-partitions ()
+  "Update the list of SLURM partitions.
+This list will be used to provide completion when filtering jobs
+by partition."
+  (slurm--start-process
+   :pre
+   (erase-buffer)
+   :command
+   '("scontrol" "show" "partitions")
+   :post-process
+   (let ((partitions nil))
+     (goto-char (point-min))
+     (while (search-forward "PartitionName=" nil t)
+       (let ((beg (point)))
+         (forward-word)
+         (add-to-list 'partitions (buffer-substring beg (point)))))
+     (with-current-buffer slurm--buffer
+       (slurm--set :partitions partitions)))))
 
 (defun slurm-partition-id ()
+  "Return the id of the slurm partition at point."
   (backward-paragraph)(forward-line 1)
   (if (search-forward-regexp "^[[:space:]]*PartitionName=\\(.*\\)[[:space:]]*$" (line-end-position))
       (match-string 1)
     (error "Could not extract partition name on this paragraph")))
 
 (defun slurm-partition-details ()
-  (when (eq slurm-view 'slurm-partition-list)
+  "Display details about the partition at point."
+  (when (slurm--in-view 'slurm-partition-list)
     (slurm-cluster-info (slurm-partition-id))))
+
+
+;; *** Cluster information
 
 (defun slurm-cluster-info (partition)
   "Show global information on the current state of the cluster.
 
 If PARTITION is set, only show that partition's state.
-If PARTITION is `nil', show stats for the entire cluster."
+If PARTITION is nil, show stats for the entire cluster."
   (interactive (list nil))
   (when (eq major-mode 'slurm-mode)
-    (let ((switch (if partition (format "-p '%s'" partition) "")))
-      (setq slurm-command (list
-                           (format "sinfo %s" switch)
-                           (format "sinfo -o '%%C' %s" switch))))
+    (let ((switch (if partition `("-p" ,partition))))
+      (slurm--set :command `(("sinfo" ,@switch)
+                             ("sinfo" "-o" "%C" ,@switch))))
     (setq mode-name "Slurm (cluster info)")
-    (setq slurm-view 'slurm-cluster-info)
+    (slurm--set :view 'slurm-cluster-info)
     (slurm-refresh)))
 
 
-
-
-;;;;;;;;;;;;;;;;;;;;;;;
-;; slurm-update mode ;;
-;;;;;;;;;;;;;;;;;;;;;;;
+;; * Slurm-update-mode
 
 (defvar slurm-update-mode-map nil
-  "keymap for slurm-update-mode.")
+  "Keymap for slurm-update-mode.")
 (if slurm-update-mode-map ()
   (progn
     (setq slurm-update-mode-map text-mode-map)
@@ -411,45 +664,58 @@ Edit the line you want to update and hit \\[slurm-update-send] to validate your 
 Key bindings:
   \\[slurm-update-send] - Validate your changes on a line.
   \\[slurm-update-refresh] - Refresh view.
-  \\[slurm-update-quit] - Quit this mode.
-"
+  \\[slurm-update-quit] - Quit this mode."
   (interactive)
   (kill-all-local-variables)
   (use-local-map slurm-update-mode-map)
   (setq mode-name "Slurm update")
   (setq major-mode 'slurm-update-mode)
-  (make-local-variable 'slurm-command)
+  (make-local-variable 'slurm--state)
   (hl-line-mode 1))
 
 (defun slurm-update-refresh ()
   "Refresh slurm-update buffer."
   (interactive)
   (when (eq major-mode 'slurm-update-mode)
-    (let ((old-position (point)))
-      (erase-buffer)
-      (shell-command slurm-command t)
-      (goto-char (point-min))
-      (while (re-search-forward "^[[:space:]]+" nil t)
-        (replace-match ""))
-      (goto-char (point-min))
-      (while (search-forward " " nil t)
-        (backward-delete-char 1)
-        (newline))
-      (goto-char (point-min))
-      (while (< (forward-line 1) 1)
-        (insert "  "))
-      (goto-char old-position))))
+    (slurm--start-process
+     :pre
+     (progn
+       (erase-buffer)
+       (slurm--set :old-position (point)))
+     :current-buffer t
+     :command
+     (car (slurm--get :command))
+     :post-process
+     (progn
+       (goto-char (point-min))
+       (while (re-search-forward "^[[:space:]]+" nil t)
+         (replace-match ""))
+       (goto-char (point-min))
+       (while (re-search-forward " [[:alnum:]]+=" nil t)
+         (goto-char (match-beginning 0))
+         (delete-char 1)
+         (newline))
+       (goto-char (slurm--get :old-position))))))
 
 (defun slurm-update-send ()
   "Validate a parameter change in the slurm-update-buffer."
   (interactive)
   (when (eq major-mode 'slurm-update-mode)
-    (let* ((id       (save-excursion (goto-char (point-min))
-                                     (buffer-substring (line-beginning-position) (line-end-position))))
-           (prop     (buffer-substring (line-beginning-position) (line-end-position)))
-           (command  (format "scontrol update %s %s" id prop)))
-      (when (eq (shell-command command) 0)
-        (slurm-update-refresh)))))
+    (let* ((id       (save-excursion
+                       (goto-char (point-min))
+                       (buffer-substring (line-beginning-position) (line-end-position))))
+           (prop     (buffer-substring (line-beginning-position) (line-end-position))))
+      (slurm--start-process
+       :pre
+       (progn
+         (erase-buffer)
+         (message "Updating job..."))
+       :command
+       `("scontrol" "update" ,id ,prop)
+       :post-process
+       (message "%s" (buffer-string))
+       :post-slurm
+       (slurm-update-refresh)))))
 
 (defun slurm-update-quit ()
   "Quit slurm-update mode."
@@ -462,3 +728,7 @@ Key bindings:
 (provide 'slurm-mode)
 
 ;; slurm-mode.el ends here
+
+(provide 'slurm-mode)
+
+;;; slurm-mode.el ends here

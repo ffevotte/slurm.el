@@ -147,6 +147,9 @@ This mode also provides a command to insert new SBATCH directives :
     (when (slurm-search-directive (point-max))
       (slurm-script-mode 1))))
 
+;;;###autoload
+(add-hook 'sh-mode-hook 'turn-on-slurm-script-mode)
+
 (provide 'slurm-script-mode)
 
 ;; slurm-script-mode.el ends here

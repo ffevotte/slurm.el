@@ -12,11 +12,16 @@ It is composed of two parts:
 
 ## Installation
 
-Just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
+Ensure the following dependencies are installed:
+- [`dash.el`](https://github.com/magnars/dash.el)
+- [`s.el`](https://github.com/magnars/s.el)
+
+Then, just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
 
 ```lisp
 (add-to-list 'load-path "/path/to/slurm.el")
-(require 'slurm)
+(require 'slurm-mode)
+(require 'slurm-script-mode)
 ```
 
 
@@ -45,7 +50,7 @@ line which have been used to obtain the information presented.
 
 In all views, the following bindings are available:
 
-- `h`: show **h**elp
+- `h`: show Help
 - `g`: refresh view
 
 
@@ -53,9 +58,9 @@ In all views, the following bindings are available:
 
 The following key bindings can be used to switch between views:
 
-- `j`: **j**obs list (default view)
-- `p`: **p**artitions list
-- `i`: cluster **i**nformation
+- `j`: Jobs list (default view)
+- `p`: Partitions list
+- `i`: cluster Information
 
 
 #### Jobs list
@@ -66,15 +71,15 @@ This view displays the list of all jobs managed by SLURM on the cluster, as obta
 The jobs list can be manipulated using the following bindings:
 
 - `/`: filter the jobs list by:
-  - `u`: **u**ser;
-  - `p`: **p**artition.
+  - `u`: User;
+  - `p`: Partition.
 
 - `s`: sort the jobs list by:
-  - `u`: **u**ser;
-  - `p`: **p**artition;
-  - `P`: job **p**riority;
-  - `d`: use the **d**efault sorting order;
-  - `c`: **c**ustomize sorting order by specifying a suitable argument for the `-S` switch of `squeue`.
+  - `u`: User;
+  - `p`: Partition;
+  - `P`: job Priority;
+  - `d`: use the Default sorting order;
+  - `c`: Customize sorting order by specifying a suitable argument for the `-S` switch of `squeue`.
 
   Giving this command a prefix argument reverses the sorting order. For example, `C-u s u` sorts by
   user in reverse alphabetical order.
@@ -84,11 +89,11 @@ A few operations can be done from this view:
 
 - `RET`: show job details, as obtained with the `scontrol show job JOBID` command.
 
-- `U`: show **u**ser details on the job submitter (using the `finger USER` command).
+- `U`: show User details on the job submitter (using the `finger USER` command).
 
-- `k` or `d`: **k**ill job by issuing the `scancel JOBID` command.
+- `k` or `d`: Kill job by issuing the `scancel JOBID` command.
 
-- `e` or `u`: **e**dit (or **u**pdate) job.
+- `e` or `u`: Edit (or Update) job.
 
    In this mode, job submission parameters can be interactively updated (as could be done using the
    `scontrol update job JOBID` command). Each parameter is presented on its own line. After editing
@@ -122,7 +127,9 @@ Some variables can be set to customize `slurm-mode`'s behaviour:
   owned by the current user.
 
 - `slurm-script-directive-face`: face name to use for `#SBATCH` directives in job submission
-  scripts.
+scripts.
+
+- `slurm-squeue-format`: the list of fields to display in the jobs list.
 
 All these variables can be customized via `M-x customize-group RET slurm RET`.
 
