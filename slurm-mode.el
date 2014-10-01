@@ -530,12 +530,23 @@ currently being displayed."
       (slurm--set :view 'slurm-job-details)
       (slurm-refresh))))
 
-(defun slurm-job-cancel ()
-  "Kill (cancel) current slurm job."
-  (interactive)
+(defun slurm-job-cancel (argp)
+  "Kill (cancel) current slurm job.
+
+When used with a prefix argument (ARGP non-nil) and the current
+job belongs to a job array, cancel the whole array."
+  (interactive "P")
   (when (eq major-mode 'slurm-mode)
-    (let ((jobid (slurm-job-id)))
-      (when (y-or-n-p (format "Really cancel job %s? " jobid))
+    (let ((jobid (slurm-job-id))
+          (type  "job"))
+
+      (when (and argp
+                 (string-match "^\\([[:digit:]]+\\)_\\([[:digit:]]+\\)$"
+                               jobid))
+        (setq type  "array"
+              jobid (match-string 1 jobid)))
+
+      (when (y-or-n-p (format "Really cancel %s %s? " type jobid))
         (slurm--run-command
          :message "Cancelling job"
          :command `("scancel" ,jobid))
