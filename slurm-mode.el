@@ -79,66 +79,57 @@ ALIGN is either `left' or `right'."
                                        (const left)
                                        (const right)))))
 
-
 ;; * Utilities
 
 ;; ** Process management
 
 (defvar slurm--buffer)
-(defmacro slurm--start-process (&rest args)
-  "Start an asynchronous process.
+(defmacro slurm--run-command (&rest args)
+  "Synchronously run a command.
 
 ARGS is a plist containing the following entries:
 
 :command (required) - the command to run, as a list.
 
-:pre (optional) - form to be executed in the process buffer
-  before it is run.
+:message (optional) - a message to be displayed.
 
-:post-slurm (optional) - form to be executed asynchronously in
-  the slurm buffer (i.e. the buffer from which
-  `slurm--start-process' is called) after completion of the
-  process.
+:post (optional) - form to be executed in the process buffer
+  after completion.  The `slurm--buffer' variable is let-bound
+  around this block, pointing to the slurm buffer (i.e. the
+  buffer from which `slurm--run-command' was called).
 
-:post-process (optional) - form to be executed asynchronously in
-  the process buffer after completion.  A buffer-local
-  `slurm--buffer' variable is set there, pointing the the slurm
-  buffer (i.e. the buffer from which `slurm--start-process' was
-  called).
-
-:current-buffer (optional) - if non-nil, dont create a specific
-  buffer-process; use the current buffer instead."
+:current-buffer (optional) - if non-nil, insert the output of the
+  command at the end of the current buffer."
   (let* ((command        (plist-get args :command))
-         (pre            (plist-get args :pre))
-         (post-slurm     (plist-get args :post-slurm))
-         (post-process   (plist-get args :post-process))
+         (post           (plist-get args :post))
          (current-buffer (plist-get args :current-buffer))
+         (message        (plist-get args :message))
 
-         (buffer-sym   (make-symbol "buffer"))
-         (command-sym  (make-symbol "command"))
-         (process-sym  (make-symbol "process"))
-         (event-sym    (make-symbol "event")))
+         (buffer-sym     (cl-gensym "buffer"))
+         (command-sym    (cl-gensym "command"))
+         (message-sym    (cl-gensym "message")))
     `(progn
-       (let* ((,command-sym ,command)
-              (,buffer-sym  ,(if current-buffer
-                                 `(current-buffer)
-                               `(get-buffer-create (format "*slurm %s*" (car ,command-sym))))))
-         (let ((slurm-buffer (current-buffer)))
-           (with-current-buffer ,buffer-sym
-             (set (make-local-variable 'slurm--buffer)
-                  slurm-buffer)))
-         (with-current-buffer (get-buffer-create ,buffer-sym)
-           ,pre)
-         (set-process-sentinel
-          (apply 'start-file-process
-                 (car ,command-sym)
-                 ,buffer-sym
-                 ,command-sym)
-          #'(lambda (,process-sym ,event-sym)
-              (with-current-buffer (process-buffer ,process-sym)
-                ,post-process
-                (with-current-buffer slurm--buffer
-                  ,post-slurm))))))))
+       (let* ((slurm--buffer (current-buffer))
+              (,command-sym  ,command)
+              (,message-sym  ,message)
+              (,buffer-sym   (get-buffer-create " *slurm process*")))
+         ,@(when message
+             `((message "%s..." ,message-sym)))
+         (with-current-buffer ,buffer-sym
+           (erase-buffer)
+           (apply 'shell-command
+                  (combine-and-quote-strings ,command-sym)
+                  t
+                  nil))
+         ,@(when message
+             `((message "%s...done." ,message-sym)))
+         ,@(when post
+             `((with-current-buffer ,buffer-sym
+                 ,post)))
+         ,@(when current-buffer
+             `((save-excursion
+                 (goto-char (point-max))
+                 (insert-buffer-substring ,buffer-sym))))))))
 
 
 ;; ** Internal state management
@@ -155,7 +146,6 @@ ARGS is a plist containing the following entries:
 ;; :partitions       - list of available partitions
 ;; :old-position     - current position just before refreshing a view. Will try
 ;;                     to go back there after refreshing.
-;; :message          - message to be displayed after command completion
 
 ;; -- specific to the jobs list
 ;;
@@ -305,29 +295,22 @@ Schedule the following command to be executed after termination of the current o
         (goto-char (point-max))
         (newline 3)
         (let ((pos1 (point)))
-          (insert "> "
-                  (s-join " "
-                          (-map #'(lambda (arg) (format "'%s'" arg)) command)))
+          (insert "> " (combine-and-quote-strings command))
           (add-text-properties pos1 (point) '(face ((:weight bold)))))
         (newline 2)
         (sit-for 0)
 
-        (slurm--start-process
-         :pre
-         (progn
-           (slurm--set :message (format "Running %s..." (car command)))
-           (message "%s" (slurm--get :message)))
+        (slurm--run-command
+         :message (format "Running %s" (car command))
          :current-buffer t
-         :command command
-         :post-process
-         (progn
+         :command command)
+        (progn
            (delete-trailing-whitespace)
            (goto-char (point-min))
            (forward-line (1- (slurm--get :old-position)))
            (setq buffer-read-only t)
            (set-buffer-modified-p nil)
-           (message "%s done." (slurm--get :message))
-           (slurm--run-one-command)))))))
+           (slurm--run-one-command))))))
 
 (defun slurm-refresh ()
   "Refresh current slurm view."
@@ -531,17 +514,10 @@ currently being displayed."
   (interactive)
   (when (slurm--in-view 'slurm-job-list)
     (let ((user (slurm--squeue-get-column 'user)))
-      (slurm--start-process
-       :pre
-       (progn
-         (erase-buffer)
-         (message "Retrieving user details..."))
-       :command
-       `("finger" ,user)
-       :post-process
-       (progn
-         (message "Retrieving user details... done.")
-         (message "%s" (buffer-string)))))))
+      (slurm--run-command
+       :message "Retrieving user details"
+       :command `("finger" ,user)
+       :post    (message "%s" (buffer-string))))))
 
 (defun slurm-job-details ()
   "Show details about the current SLURM job."
@@ -560,16 +536,10 @@ currently being displayed."
   (when (eq major-mode 'slurm-mode)
     (let ((jobid (slurm-job-id)))
       (when (y-or-n-p (format "Really cancel job %s? " jobid))
-        (slurm--start-process
-         :pre
-         (progn
-           (message "Cancelling job..."))
-         :command
-         `("scancel" ,jobid)
-         :post-slurm
-         (progn
-           (message "Cancelling job... done.")
-           (slurm-refresh)))))))
+        (slurm--run-command
+         :message "Cancelling job"
+         :command `("scancel" ,jobid))
+        (slurm-refresh)))))
 
 (defun slurm-job-update ()
   "Edit (update) current slurm job."
@@ -601,12 +571,9 @@ currently being displayed."
   "Update the list of SLURM partitions.
 This list will be used to provide completion when filtering jobs
 by partition."
-  (slurm--start-process
-   :pre
-   (erase-buffer)
-   :command
-   '("scontrol" "show" "partitions")
-   :post-process
+  (slurm--run-command
+   :command '("scontrol" "show" "partitions")
+   :post
    (let ((partitions nil))
      (goto-char (point-min))
      (while (search-forward "PartitionName=" nil t)
@@ -677,25 +644,21 @@ Key bindings:
   "Refresh slurm-update buffer."
   (interactive)
   (when (eq major-mode 'slurm-update-mode)
-    (slurm--start-process
-     :pre
-     (progn
-       (erase-buffer)
-       (slurm--set :old-position (point)))
+    (slurm--set :old-position (point))
+    (erase-buffer)
+    (slurm--run-command
      :current-buffer t
-     :command
-     (car (slurm--get :command))
-     :post-process
-     (progn
-       (goto-char (point-min))
-       (while (re-search-forward "^[[:space:]]+" nil t)
-         (replace-match ""))
-       (goto-char (point-min))
-       (while (re-search-forward " [[:alnum:]]+=" nil t)
-         (goto-char (match-beginning 0))
-         (delete-char 1)
-         (newline))
-       (goto-char (slurm--get :old-position))))))
+     :command (car (slurm--get :command)))
+
+    (goto-char (point-min))
+    (while (re-search-forward "^[[:space:]]+" nil t)
+      (replace-match ""))
+    (goto-char (point-min))
+    (while (re-search-forward " [[:alnum:]]+=" nil t)
+      (goto-char (match-beginning 0))
+      (delete-char 1)
+      (newline))
+    (goto-char (slurm--get :old-position))))
 
 (defun slurm-update-send ()
   "Validate a parameter change in the slurm-update-buffer."
@@ -705,17 +668,10 @@ Key bindings:
                        (goto-char (point-min))
                        (buffer-substring (line-beginning-position) (line-end-position))))
            (prop     (buffer-substring (line-beginning-position) (line-end-position))))
-      (slurm--start-process
-       :pre
-       (progn
-         (erase-buffer)
-         (message "Updating job..."))
-       :command
-       `("scontrol" "update" ,id ,prop)
-       :post-process
-       (message "%s" (buffer-string))
-       :post-slurm
-       (slurm-update-refresh)))))
+      (slurm--run-command
+       :message "Updating job"
+       :command `("scontrol" "update" ,id ,prop))
+      (slurm-update-refresh))))
 
 (defun slurm-update-quit ()
   "Quit slurm-update mode."
