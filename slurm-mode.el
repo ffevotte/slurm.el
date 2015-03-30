@@ -52,6 +52,17 @@
   :type 'boolean)
 
 ;;;###autoload
+(defcustom slurm-scancel-confirm t
+  "If non-nil, ask for confirmation before cancelling a job."
+  :group 'slurm
+  :type  'boolean)
+
+(defun slurm--set-squeue-format (var val)
+  (set-default var val)
+  (when (fboundp 'slurm-update-squeue-format)
+    (slurm-update-squeue-format)))
+
+;;;###autoload
 (defcustom slurm-squeue-format
   '((jobid      9 right)
     (partition  9 left)
@@ -70,8 +81,12 @@ where:
 FIELD is a symbol whose name corresponds to the column title in
       the squeue output.
 WIDTH is an integer setting the column width.
-ALIGN is either `left' or `right'."
+ALIGN is either `left' or `right'.
+
+`slurm-update-squeue-format' must be called after this variable
+is changed to ensure the new value is used wherever necessary."
   :group 'slurm
+  :set   'slurm--set-squeue-format
   :type  '(alist
            :key-type   (symbol :tag "Field")
            :value-type (group (integer :tag "Width")
@@ -250,8 +265,6 @@ Manipulations of the jobs list:
 
   (set (make-local-variable 'slurm--state) nil)
 
-  (slurm-init)
-
   ;; Initialize user filter
   (if slurm-filter-user-at-start
       (slurm-filter-user (getenv "USER"))
@@ -337,7 +350,9 @@ Schedule the following command to be executed after termination of the current o
 ;; *** Jobs list
 
 (defvar slurm--squeue-format-switch nil
-  "Switch passed to the squeue command to set columns format.")
+  "Switch passed to the squeue command to set columns format.
+Must be updated using `slurm-update-squeue-format' whenever
+`slurm-squeue-format' is modified.")
 
 (defun slurm-job-list ()
   "Switch to slurm jobs list view."
@@ -370,8 +385,8 @@ Schedule the following command to be executed after termination of the current o
 (defvar slurm--squeue-format-columns nil
   "Definition of columns in the squeue output.
 
-Must be updated using `slurm-init' whenever `slurm-squeue-format'
-is modified.")
+Must be updated using `slurm-update-squeue-format' whenever
+`slurm-squeue-format' is modified.")
 
 
 (defun slurm--map-squeue-format (fun)
@@ -385,7 +400,7 @@ FUN (name width &optional align)"
           (apply fun field))
         slurm-squeue-format))
 
-(defun slurm-init ()
+(defun slurm-update-squeue-format ()
   "Update internal variables when `slurm-squeue-format' is changed.
 
 Updated variables are `slurm--squeue-format-columns' and
@@ -406,6 +421,7 @@ Updated variables are `slurm--squeue-format-columns' and
              (prog1
                  (list name pos (+ pos width))
                (setq pos (+ pos width 1))))))))
+(slurm-update-squeue-format)
 
 (defun slurm--squeue-get-column (name)
   "Get the value of the NAME column in the current line.
@@ -691,10 +707,6 @@ Key bindings:
     (kill-buffer)
     (switch-to-buffer "*slurm*")
     (slurm-refresh)))
-
-(provide 'slurm-mode)
-
-;; slurm-mode.el ends here
 
 (provide 'slurm-mode)
 
