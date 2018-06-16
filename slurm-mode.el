@@ -267,7 +267,7 @@ Manipulations of the jobs list:
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
-      (slurm-filter-user (getenv "USER"))
+      (slurm-filter-user (shell-command-to-string "echo -n $USER"))
     (slurm-filter-user ""))
 
   ;; Initialize partition filter
