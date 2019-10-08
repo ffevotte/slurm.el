@@ -131,6 +131,16 @@ scripts.
 
 - `slurm-squeue-format`: the list of fields to display in the jobs list.
 
+- `slurm-remote-host`: Execute SLURM commands on this remote host
+  using SSH rather than executing them directly. See also
+  `slurm-remote-username` and `slurm-remote-ssh-cmd`.
+
+- `slurm-remote-username`: Username to use for SSHing to the remote
+  machine specified in `slurm-remote-host`."
+
+- `slurm-remote-ssh-cmd`: Command to use as SSH when executing SLURM commands on a
+  remote machine. Defaults to `ssh`.
+
 All these variables can be customized via `M-x customize-group RET slurm RET`.
 
 

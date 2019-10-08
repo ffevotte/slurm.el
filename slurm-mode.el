@@ -52,6 +52,28 @@
   :type 'boolean)
 
 ;;;###autoload
+(defcustom slurm-remote-host nil
+  "Execute SLURM commands on this remote host using SSH rather
+than executing them directly. See also `slurm-remote-username'
+and `slurm-remote-ssh-cmd'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+(defcustom slurm-remote-username nil
+  "Username to use for SSHing to the remote machine specified in
+`slurm-remote-host'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+(defcustom slurm-remote-ssh-cmd "ssh"
+  "Command to use as SSH when executing SLURM commands on a
+remote machine."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
 (defcustom slurm-scancel-confirm t
   "If non-nil, ask for confirmation before cancelling a job."
   :group 'slurm
@@ -98,6 +120,19 @@ is changed to ensure the new value is used wherever necessary."
 
 ;; ** Process management
 
+(defun slurm--remote-command (cmd)
+  "Wraps SLURM command CMD in ssh if `slurm-remote-host' is
+set. Otherwise, CMD is returned unmodified."
+   (if slurm-remote-host
+       `(,slurm-remote-ssh-cmd
+         ,(if slurm-remote-username
+              (concat "-l" slurm-remote-username)
+            "")
+         ,slurm-remote-host
+         ,(combine-and-quote-strings
+           (if (listp cmd) cmd `(,cmd))))
+     cmd))
+
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
   "Synchronously run a command.
@@ -133,9 +168,10 @@ ARGS is a plist containing the following entries:
          (with-current-buffer ,buffer-sym
            (erase-buffer)
            (apply 'shell-command
-                  (combine-and-quote-strings ,command-sym)
-                  t
-                  nil))
+                  (combine-and-quote-strings
+                   (slurm--remote-command ,command-sym))
+                   t
+                   nil))
          ,@(when message
              `((message "%s...done." ,message-sym)))
          ,@(when post
@@ -267,7 +303,10 @@ Manipulations of the jobs list:
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
-      (slurm-filter-user (shell-command-to-string "echo -n $USER"))
+      (slurm-filter-user (if (and slurm-remote-host
+                                  slurm-remote-username)
+                             slurm-remote-username
+                           (shell-command-to-string "echo -n $USER")))
     (slurm-filter-user ""))
 
   ;; Initialize partition filter
@@ -308,7 +347,10 @@ Schedule the following command to be executed after termination of the current o
         (goto-char (point-max))
         (newline 3)
         (let ((pos1 (point)))
-          (insert "> " (combine-and-quote-strings command))
+          (insert (if slurm-remote-host
+                      (format "%s> " slurm-remote-host)
+                    "> ")
+                  (combine-and-quote-strings command))
           (add-text-properties pos1 (point) '(face ((:weight bold)))))
         (newline 2)
         (sit-for 0)
