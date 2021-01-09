@@ -94,6 +94,38 @@ is changed to ensure the new value is used wherever necessary."
                                        (const left)
                                        (const right)))))
 
+(defun slurm--set-sacct-format (var val)
+  (set-default var val)
+  (when (fboundp 'slurm-update-sacct-format)
+    (slurm-update-sacct-format)))
+
+(defcustom slurm-sacct-format
+  '((jobid      9 left)
+    (jobname  20  right)
+    (workdir  70  right)
+    (state  1  right))
+  "List of fields to display in the jobs list.
+
+Each entry in the list should be of the form:
+  (FIELD WIDTH ALIGNMENT)
+where:
+FIELD is a symbol whose name corresponds to the column title in
+      the squeue output.
+WIDTH is an integer setting the column width.
+ALIGN is either `left' or `right'.
+
+`slurm-update-sacct-format' must be called after this variable
+is changed to ensure the new value is used wherever necessary."
+  :group 'slurm
+  :set   'slurm--set-sacct-format
+  :type  '(alist
+           :key-type   (symbol :tag "Field")
+           :value-type (group (integer :tag "Width")
+                              (choice  :tag "Alignment"
+                                       (const left)
+                                       (const right)))))
+
+
 ;; * Utilities
 
 ;; ** Process management
@@ -202,6 +234,7 @@ Assign it the new value VALUE."
     (define-key map (kbd "h")   'describe-mode)
     (define-key map (kbd "?")   'describe-mode)
     (define-key map (kbd "j")   'slurm-job-list)
+    (define-key map (kbd "a")   'slurm-sacct)
     (define-key map (kbd "p")   'slurm-partition-list)
     (define-key map (kbd "i")   'slurm-cluster-info)
     (define-key map (kbd "g")   'slurm-refresh)
@@ -233,6 +266,7 @@ Assign it the new value VALUE."
 
 Views:
   \\[slurm-job-list] - View jobs list.
+  \\[slurm-sacct] - View history of jobs.
   \\[slurm-partition-list] - View partitions list.
   \\[slurm-cluster-info] - View cluster information.
   \\[slurm-refresh] - Refresh current view.
@@ -354,6 +388,12 @@ Schedule the following command to be executed after termination of the current o
 Must be updated using `slurm-update-squeue-format' whenever
 `slurm-squeue-format' is modified.")
 
+(defvar slurm--sacct-format-switch nil
+  "Switch passed to the squeue command to set columns format.
+Must be updated using `slurm-update-sacct-format' whenever
+`slurm-sacct-format' is modified.")
+
+
 (defun slurm-job-list ()
   "Switch to slurm jobs list view."
   (interactive)
@@ -365,6 +405,18 @@ Must be updated using `slurm-update-squeue-format' whenever
                             ,@(slurm--squeue-sort))))
     (setq mode-name "Slurm (jobs list)")
     (slurm--set :view 'slurm-job-list)
+    (slurm-refresh)))
+
+(defun slurm-sacct ()
+  "Switch to slurm jobs list view."
+  (interactive)
+  (when (eq major-mode 'slurm-mode)
+    (slurm--set :command `(("sacct"
+                            "--format" ,slurm--sacct-format-switch
+                            ,@(slurm--squeue-filter-user)
+                            ,@(slurm--sacct-take-date))))
+    (setq mode-name "Slurm (sacct list)")
+    (slurm--set :view 'slurm-sacct)
     (slurm-refresh)))
 
 
@@ -388,6 +440,12 @@ Must be updated using `slurm-update-squeue-format' whenever
 Must be updated using `slurm-update-squeue-format' whenever
 `slurm-squeue-format' is modified.")
 
+(defvar slurm--sacct-format-columns nil
+  "Definition of columns in the squeue output.
+
+Must be updated using `slurm-update-squeue-format' whenever
+`slurm-squeue-format' is modified.")
+
 
 (defun slurm--map-squeue-format (fun)
   "Helper function to walk the squeue format.
@@ -399,6 +457,17 @@ FUN (name width &optional align)"
   (-map (lambda (field)
           (apply fun field))
         slurm-squeue-format))
+
+(defun slurm--map-sacct-format (fun)
+  "Helper function to walk the squeue format.
+
+FUN is called for each field specification in
+`slurm-squeue-format'.  It should have the following prototype:
+
+FUN (name width &optional align)"
+  (-map (lambda (field)
+          (apply fun field))
+        slurm-sacct-format))
 
 (defun slurm-update-squeue-format ()
   "Update internal variables when `slurm-squeue-format' is changed.
@@ -423,6 +492,8 @@ Updated variables are `slurm--squeue-format-columns' and
                (setq pos (+ pos width 1))))))))
 (slurm-update-squeue-format)
 
+
+
 (defun slurm--squeue-get-column (name)
   "Get the value of the NAME column in the current line.
 
@@ -435,6 +506,28 @@ listed in `slurm-squeue-format'."
     (s-trim (buffer-substring-no-properties
              (+ line-beg col-beg)
              (+ line-beg col-end)))))
+
+
+(defun slurm-update-sacct-format ()
+  "Update internal variables when `slurm-squeue-format' is changed.
+
+Updated variables are `slurm--squeue-format-columns' and
+`slurm--squeue-format-switch'."
+  (setq slurm--sacct-format-switch
+        (-reduce
+         (lambda (a b) (concat a "," b))
+         (slurm--map-sacct-format
+          (lambda (name width &optional align)
+                   (format "%s%s%d" name "%" width)))))
+
+  (setq slurm--sacct-format-columns
+        (let ((pos 0))
+          (slurm--map-sacct-format
+           (lambda (name width &optional align)
+             (prog1
+                 (list name pos (+ pos width))
+               (setq pos (+ pos width 1))))))))
+(slurm-update-sacct-format)
 
 
 ;; **** Filtering
@@ -450,6 +543,11 @@ listed in `slurm-squeue-format'."
   "Return the squeue switch to filter by user."
   (unless (string= (slurm--get :filter-user) "")
     (list "-u" (slurm--get :filter-user))))
+
+(defun slurm--sacct-take-date ()
+  "Return the squeue switch to filter by user."
+  (unless (string= (slurm--get :filter-user) "")
+    (list "-S" (org-read-date))))
 
 
 (defun slurm-filter-partition (partition)
