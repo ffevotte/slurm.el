@@ -103,7 +103,9 @@ is changed to ensure the new value is used wherever necessary."
   '((jobid      9 left)
     (jobname  20  right)
     (workdir  70  right)
-    (state  1  right))
+    (state  30  right)
+    (start 30 right)
+    (elapsed 30 right))
   "List of fields to display in the jobs list.
 
 Each entry in the list should be of the form:
