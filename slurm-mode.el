@@ -52,6 +52,23 @@
   :type 'boolean)
 
 ;;;###autoload
+(defcustom slurm-remote-host "narvi"
+  "Execute SLURM commands on this remote host using SSH rather
+than executing them directly. See also `slurm-remote-username'
+and `slurm-remote-ssh-cmd'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+(defcustom slurm-remote-username "tripathy"
+  "Username to use for SSHing to the remote machine specified in
+`slurm-remote-host'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+
+;;;###autoload
 (defcustom slurm-scancel-confirm t
   "If non-nil, ask for confirmation before cancelling a job."
   :group 'slurm
@@ -132,6 +149,23 @@ is changed to ensure the new value is used wherever necessary."
 
 ;; ** Process management
 
+(defun slurm--remote-command (cmd)
+  "Wraps SLURM command CMD in ssh if `slurm-remote-host' is
+set. Otherwise, CMD is returned unmodified."
+   (if slurm-remote-host
+       (append `(,slurm-remote-host)
+          (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
+cmd))
+
+(defun concatString (list)
+  "A non-recursive function that concatenates a list of strings."
+  (if (listp list)
+      (let ((result ""))
+        (dolist (item list)
+          (if (stringp item)
+              (setq result (concatenate 'string result item " "))))
+        result)))
+
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
   "Synchronously run a command.
@@ -166,10 +200,11 @@ ARGS is a plist containing the following entries:
              `((message "%s..." ,message-sym)))
          (with-current-buffer ,buffer-sym
            (erase-buffer)
-           (apply 'shell-command
-                  (combine-and-quote-strings ,command-sym)
-                  t
-                  nil))
+           (apply 'eshell-command
+                  (concatString
+                   (slurm--remote-command ,command-sym))
+                   t
+                   nil))
          ,@(when message
              `((message "%s...done." ,message-sym)))
          ,@(when post
@@ -225,6 +260,9 @@ Assign it the new value VALUE."
 (defun slurm ()
   "Open a slurm-mode buffer to manage jobs."
   (interactive)
+  (if (file-remote-p (buffer-file-name) nil)
+      (setq slurm-remote-host (concatenate 'string "/ssh:" (file-remote-p default-directory 'host) ":" ";")))
+
   (switch-to-buffer (get-buffer-create "*slurm*"))
   (if (eq major-mode 'slurm-mode)
       (slurm-refresh)
@@ -303,7 +341,10 @@ Manipulations of the jobs list:
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
-      (slurm-filter-user (shell-command-to-string "echo -n $USER"))
+      (slurm-filter-user (if (and slurm-remote-host
+                                  slurm-remote-username)
+                             slurm-remote-username
+                           (shell-command-to-string "echo -n $USER")))
     (slurm-filter-user ""))
 
   ;; Initialize partition filter
@@ -344,7 +385,10 @@ Schedule the following command to be executed after termination of the current o
         (goto-char (point-max))
         (newline 3)
         (let ((pos1 (point)))
-          (insert "> " (combine-and-quote-strings command))
+          (insert (if slurm-remote-host
+                      (format "%s> " slurm-remote-host)
+                    "> ")
+                  (combine-and-quote-strings command))
           (add-text-properties pos1 (point) '(face ((:weight bold)))))
         (newline 2)
         (sit-for 0)
