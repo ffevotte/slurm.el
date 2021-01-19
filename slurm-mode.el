@@ -52,7 +52,7 @@
   :type 'boolean)
 
 ;;;###autoload
-(defcustom slurm-remote-host "narvi"
+(defcustom slurm-remote-host nil
   "Execute SLURM commands on this remote host using SSH rather
 than executing them directly. See also `slurm-remote-username'
 and `slurm-remote-ssh-cmd'."
@@ -60,7 +60,7 @@ and `slurm-remote-ssh-cmd'."
   :type 'string)
 
 ;;;###autoload
-(defcustom slurm-remote-username "tripathy"
+(defcustom slurm-remote-username nil
   "Username to use for SSHing to the remote machine specified in
 `slurm-remote-host'."
   :group 'slurm
@@ -260,10 +260,13 @@ Assign it the new value VALUE."
 (defun slurm ()
   "Open a slurm-mode buffer to manage jobs."
   (interactive)
-  (if (file-remote-p (buffer-file-name) nil)
-      (setq slurm-remote-host (concatenate 'string "/ssh:" (file-remote-p default-directory 'host) ":" ";")))
+  (if (file-remote-p default-directory)
+      (setq slurm-remote-host (concatenate 'string "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
+    (setq slurm-remote-host nil))
 
-  (switch-to-buffer (get-buffer-create "*slurm*"))
+  (if (file-remote-p default-directory)
+      (switch-to-buffer (get-buffer-create (concatenate 'string "slurm-" (file-remote-p default-directory 'host))))
+    (switch-to-buffer (get-buffer-create "slurm")))
   (if (eq major-mode 'slurm-mode)
       (slurm-refresh)
     (slurm-mode)))
@@ -412,6 +415,7 @@ Schedule the following command to be executed after termination of the current o
     (slurm--set :old-position (max (line-number-at-pos) 8))
     (slurm--set :running-commands (slurm--get :command))
     (setq buffer-read-only nil)
+    (setq slurm-remote-host (concatenate 'string "/ssh:" (nth 1 (split-string (buffer-name) "-")) ":" ";"))
     (erase-buffer)
     (insert (format-time-string "%Y-%m-%d %H:%M:%S\n"))
     (when slurm-display-help
@@ -849,7 +853,10 @@ Key bindings:
   (interactive)
   (when (eq major-mode 'slurm-update-mode)
     (kill-buffer)
-    (switch-to-buffer "*slurm*")
+    (if (file-remote-p default-directory)
+       (switch-to-buffer (get-buffer-create (concatenate 'string "*slurm-*" (file-remote-p default-directory 'host))))
+     (switch-to-buffer (get-buffer-create "*slurm*")))
+    ;(switch-to-buffer "*slurm*")
     (slurm-refresh)))
 
 (provide 'slurm-mode)
