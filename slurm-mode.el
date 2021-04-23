@@ -119,10 +119,10 @@ is changed to ensure the new value is used wherever necessary."
 (defcustom slurm-sacct-format
   '((jobid      9 left)
     (jobname  20  right)
-    (workdir  70  right)
-    (state  30  right)
-    (start 30 right)
-    (elapsed 30 right))
+    (workdir  60  right)
+    (state  25  right)
+    (start 20 right)
+    (elapsed 10 right))
   "List of fields to display in the jobs list.
 
 Each entry in the list should be of the form:
@@ -278,6 +278,7 @@ Assign it the new value VALUE."
     (define-key map (kbd "?")   'describe-mode)
     (define-key map (kbd "j")   'slurm-job-list)
     (define-key map (kbd "a")   'slurm-sacct)
+    (define-key map (kbd "S")   'slurm-seff)
     (define-key map (kbd "p")   'slurm-partition-list)
     (define-key map (kbd "i")   'slurm-cluster-info)
     (define-key map (kbd "g")   'slurm-refresh)
@@ -320,6 +321,7 @@ Operations on partitions:
 Operations on jobs:
   \\[slurm-details] - Show job details.
   \\[slurm-job-user-details] - Show information about job submitter, as returned by `finger'.
+  \\[slurm-seff] - View resource usage of jobs.
   \\[slurm-job-cancel] - Kill (cancel) job.
   \\[slurm-job-update] - Edit (update) job.
 
@@ -461,7 +463,7 @@ Must be updated using `slurm-update-sacct-format' whenever
   "Switch to slurm jobs list view."
   (interactive)
   (when (eq major-mode 'slurm-mode)
-    (slurm--set :command `(("sacct"
+    (slurm--set :command `(("sacct" "-X"
                             "--format" ,slurm--sacct-format-switch
                             ,@(slurm--squeue-filter-user)
                             ,@(slurm--sacct-take-date))))
@@ -663,7 +665,7 @@ In the `slurm-job-list' view, this is the job displayed on the
 current line.  In the `slurm-job-details' view, this is the job
 currently being displayed."
   (beginning-of-line)
-  (cond ((slurm--in-view 'slurm-job-list)
+  (cond ((or (slurm--in-view 'slurm-sacct) (slurm--in-view 'slurm-job-list))
          (let ((jobid (slurm--squeue-get-column 'jobid)))
            (unless (string-match "^[[:digit:]]" jobid)
              (error "Could not find valid job id on this line"))
@@ -693,6 +695,27 @@ currently being displayed."
       (setq mode-name "Slurm (job details)")
       (slurm--set :view 'slurm-job-details)
       (slurm-refresh))))
+
+
+(defun slurm-seff (argp)
+  "Show details about resource usage SLURM job."
+
+  (interactive "P")
+  (when (eq major-mode 'slurm-mode)
+    (let ((jobid (slurm-job-id))
+          (type  "job"))
+
+      (when (and argp
+                 (string-match "^\\([[:digit:]]+\\)_\\([[:digit:]]+\\)$"
+                               jobid))
+        (setq type  "array"
+              jobid (match-string 1 jobid)))
+
+	(slurm--set :command `(("seff" ,jobid)))
+        (slurm--set :jobid   jobid))
+	(setq mode-name "Slurm (seff details)")
+	(slurm--set :view 'slurm-seff)
+        (slurm-refresh)))
 
 (defun slurm-job-cancel (argp)
   "Kill (cancel) current slurm job.
