@@ -163,7 +163,7 @@ cmd))
       (let ((result ""))
         (dolist (item list)
           (if (stringp item)
-              (setq result (concatenate 'string result item " "))))
+              (setq result (concat result item " "))))
         result)))
 
 (defvar slurm--buffer)
@@ -261,11 +261,11 @@ Assign it the new value VALUE."
   "Open a slurm-mode buffer to manage jobs."
   (interactive)
   (if (file-remote-p default-directory)
-      (setq slurm-remote-host (concatenate 'string "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
+      (setq slurm-remote-host (concat "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
     (setq slurm-remote-host nil))
 
   (if (file-remote-p default-directory)
-      (switch-to-buffer (get-buffer-create (concatenate 'string "slurm-" (file-remote-p default-directory 'host))))
+      (switch-to-buffer (get-buffer-create (concat "slurm-" (file-remote-p default-directory 'host))))
     (switch-to-buffer (get-buffer-create "slurm")))
   (if (eq major-mode 'slurm-mode)
       (slurm-refresh)
@@ -417,7 +417,7 @@ Schedule the following command to be executed after termination of the current o
     (slurm--set :old-position (max (line-number-at-pos) 8))
     (slurm--set :running-commands (slurm--get :command))
     (setq buffer-read-only nil)
-    (setq slurm-remote-host (concatenate 'string "/ssh:" (nth 1 (split-string (buffer-name) "-")) ":" ";"))
+    (setq slurm-remote-host (concat "/ssh:" (nth 1 (split-string (buffer-name) "-")) ":" ";"))
     (erase-buffer)
     (insert (format-time-string "%Y-%m-%d %H:%M:%S\n"))
     (when slurm-display-help
@@ -711,7 +711,7 @@ currently being displayed."
         (setq type  "array"
               jobid (match-string 1 jobid)))
 
-	(slurm--set :command `(("seff" ,jobid)))
+	(slurm--set :command `(("seff" ,jobid, "|" ,"sed" ,"-r" ,"s/[[:cntrl:]][[0-9]{1,3}m//g")))
         (slurm--set :jobid   jobid))
 	(setq mode-name "Slurm (seff details)")
 	(slurm--set :view 'slurm-seff)
@@ -877,7 +877,7 @@ Key bindings:
   (when (eq major-mode 'slurm-update-mode)
     (kill-buffer)
     (if (file-remote-p default-directory)
-       (switch-to-buffer (get-buffer-create (concatenate 'string "*slurm-*" (file-remote-p default-directory 'host))))
+       (switch-to-buffer (get-buffer-create (concat "*slurm-*" (file-remote-p default-directory 'host))))
      (switch-to-buffer (get-buffer-create "*slurm*")))
     ;(switch-to-buffer "*slurm*")
     (slurm-refresh)))
