@@ -81,7 +81,7 @@ and `slurm-remote-ssh-cmd'."
 
 ;;;###autoload
 (defcustom slurm-squeue-format
-  '((jobid      9 right)
+  '((jobid      20 left)
     (partition  9 left)
     (name      37 left)
     (user       8 left)
@@ -690,6 +690,12 @@ currently being displayed."
   (when (eq major-mode 'slurm-mode)
     (when (slurm--in-view 'slurm-job-list)
       (let ((jobid  (slurm-job-id)))
+
+	(when (string-match "^\\([[:digit:]]+\\)_*"
+                               jobid)
+        (setq type  "array"
+              jobid (match-string 1 jobid)))
+
         (slurm--set :command `(("scontrol" "show" "job" ,jobid)))
         (slurm--set :jobid   jobid))
       (setq mode-name "Slurm (job details)")
