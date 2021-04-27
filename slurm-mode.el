@@ -117,7 +117,7 @@ is changed to ensure the new value is used wherever necessary."
     (slurm-update-sacct-format)))
 
 (defcustom slurm-sacct-format
-  '((jobid      9 left)
+  '((jobid      15 left)
     (jobname  20  right)
     (workdir  60  right)
     (state  25  right)
