@@ -52,6 +52,23 @@
   :type 'boolean)
 
 ;;;###autoload
+(defcustom slurm-remote-host nil
+  "Execute SLURM commands on this remote host using SSH rather
+than executing them directly. See also `slurm-remote-username'
+and `slurm-remote-ssh-cmd'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+(defcustom slurm-remote-username nil
+  "Username to use for SSHing to the remote machine specified in
+`slurm-remote-host'."
+  :group 'slurm
+  :type 'string)
+
+;;;###autoload
+
+;;;###autoload
 (defcustom slurm-scancel-confirm t
   "If non-nil, ask for confirmation before cancelling a job."
   :group 'slurm
@@ -64,7 +81,7 @@
 
 ;;;###autoload
 (defcustom slurm-squeue-format
-  '((jobid      9 right)
+  '((jobid      20 left)
     (partition  9 left)
     (name      37 left)
     (user       8 left)
@@ -94,9 +111,60 @@ is changed to ensure the new value is used wherever necessary."
                                        (const left)
                                        (const right)))))
 
+(defun slurm--set-sacct-format (var val)
+  (set-default var val)
+  (when (fboundp 'slurm-update-sacct-format)
+    (slurm-update-sacct-format)))
+
+(defcustom slurm-sacct-format
+  '((jobid      9 left)
+    (jobname  20  right)
+    (workdir  60  right)
+    (state  25  right)
+    (start 20 right)
+    (elapsed 10 right))
+  "List of fields to display in the jobs list.
+
+Each entry in the list should be of the form:
+  (FIELD WIDTH ALIGNMENT)
+where:
+FIELD is a symbol whose name corresponds to the column title in
+      the squeue output.
+WIDTH is an integer setting the column width.
+ALIGN is either `left' or `right'.
+
+`slurm-update-sacct-format' must be called after this variable
+is changed to ensure the new value is used wherever necessary."
+  :group 'slurm
+  :set   'slurm--set-sacct-format
+  :type  '(alist
+           :key-type   (symbol :tag "Field")
+           :value-type (group (integer :tag "Width")
+                              (choice  :tag "Alignment"
+                                       (const left)
+                                       (const right)))))
+
+
 ;; * Utilities
 
 ;; ** Process management
+
+(defun slurm--remote-command (cmd)
+  "Wraps SLURM command CMD in ssh if `slurm-remote-host' is
+set. Otherwise, CMD is returned unmodified."
+   (if slurm-remote-host
+       (append `(,slurm-remote-host)
+          (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
+cmd))
+
+(defun concatString (list)
+  "A non-recursive function that concatenates a list of strings."
+  (if (listp list)
+      (let ((result ""))
+        (dolist (item list)
+          (if (stringp item)
+              (setq result (concat result item " "))))
+        result)))
 
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
@@ -132,10 +200,11 @@ ARGS is a plist containing the following entries:
              `((message "%s..." ,message-sym)))
          (with-current-buffer ,buffer-sym
            (erase-buffer)
-           (apply 'shell-command
-                  (combine-and-quote-strings ,command-sym)
-                  t
-                  nil))
+           (apply 'eshell-command
+                  (concatString
+                   (slurm--remote-command ,command-sym))
+                   t
+                   nil))
          ,@(when message
              `((message "%s...done." ,message-sym)))
          ,@(when post
@@ -191,7 +260,13 @@ Assign it the new value VALUE."
 (defun slurm ()
   "Open a slurm-mode buffer to manage jobs."
   (interactive)
-  (switch-to-buffer (get-buffer-create "*slurm*"))
+  (if (file-remote-p default-directory)
+      (setq slurm-remote-host (concat "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
+    (setq slurm-remote-host nil))
+
+  (if (file-remote-p default-directory)
+      (switch-to-buffer (get-buffer-create (concat "slurm-" (file-remote-p default-directory 'host))))
+    (switch-to-buffer (get-buffer-create "slurm")))
   (if (eq major-mode 'slurm-mode)
       (slurm-refresh)
     (slurm-mode)))
@@ -202,6 +277,8 @@ Assign it the new value VALUE."
     (define-key map (kbd "h")   'describe-mode)
     (define-key map (kbd "?")   'describe-mode)
     (define-key map (kbd "j")   'slurm-job-list)
+    (define-key map (kbd "a")   'slurm-sacct)
+    (define-key map (kbd "S")   'slurm-seff)
     (define-key map (kbd "p")   'slurm-partition-list)
     (define-key map (kbd "i")   'slurm-cluster-info)
     (define-key map (kbd "g")   'slurm-refresh)
@@ -233,6 +310,7 @@ Assign it the new value VALUE."
 
 Views:
   \\[slurm-job-list] - View jobs list.
+  \\[slurm-sacct] - View history of jobs.
   \\[slurm-partition-list] - View partitions list.
   \\[slurm-cluster-info] - View cluster information.
   \\[slurm-refresh] - Refresh current view.
@@ -243,6 +321,7 @@ Operations on partitions:
 Operations on jobs:
   \\[slurm-details] - Show job details.
   \\[slurm-job-user-details] - Show information about job submitter, as returned by `finger'.
+  \\[slurm-seff] - View resource usage of jobs.
   \\[slurm-job-cancel] - Kill (cancel) job.
   \\[slurm-job-update] - Edit (update) job.
 
@@ -267,7 +346,10 @@ Manipulations of the jobs list:
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
-      (slurm-filter-user (shell-command-to-string "echo -n $USER"))
+      (slurm-filter-user (if (and slurm-remote-host
+                                  slurm-remote-username)
+                             slurm-remote-username
+                           (shell-command-to-string "echo -n $USER")))
     (slurm-filter-user ""))
 
   ;; Initialize partition filter
@@ -308,7 +390,10 @@ Schedule the following command to be executed after termination of the current o
         (goto-char (point-max))
         (newline 3)
         (let ((pos1 (point)))
-          (insert "> " (combine-and-quote-strings command))
+          (insert (if slurm-remote-host
+                      (format "%s> " slurm-remote-host)
+                    "> ")
+                  (combine-and-quote-strings command))
           (add-text-properties pos1 (point) '(face ((:weight bold)))))
         (newline 2)
         (sit-for 0)
@@ -332,6 +417,7 @@ Schedule the following command to be executed after termination of the current o
     (slurm--set :old-position (max (line-number-at-pos) 8))
     (slurm--set :running-commands (slurm--get :command))
     (setq buffer-read-only nil)
+    (setq slurm-remote-host (concat "/ssh:" (nth 1 (split-string (buffer-name) "-")) ":" ";"))
     (erase-buffer)
     (insert (format-time-string "%Y-%m-%d %H:%M:%S\n"))
     (when slurm-display-help
@@ -354,6 +440,12 @@ Schedule the following command to be executed after termination of the current o
 Must be updated using `slurm-update-squeue-format' whenever
 `slurm-squeue-format' is modified.")
 
+(defvar slurm--sacct-format-switch nil
+  "Switch passed to the squeue command to set columns format.
+Must be updated using `slurm-update-sacct-format' whenever
+`slurm-sacct-format' is modified.")
+
+
 (defun slurm-job-list ()
   "Switch to slurm jobs list view."
   (interactive)
@@ -365,6 +457,18 @@ Must be updated using `slurm-update-squeue-format' whenever
                             ,@(slurm--squeue-sort))))
     (setq mode-name "Slurm (jobs list)")
     (slurm--set :view 'slurm-job-list)
+    (slurm-refresh)))
+
+(defun slurm-sacct ()
+  "Switch to slurm jobs list view."
+  (interactive)
+  (when (eq major-mode 'slurm-mode)
+    (slurm--set :command `(("sacct" "-X"
+                            "--format" ,slurm--sacct-format-switch
+                            ,@(slurm--squeue-filter-user)
+                            ,@(slurm--sacct-take-date))))
+    (setq mode-name "Slurm (sacct list)")
+    (slurm--set :view 'slurm-sacct)
     (slurm-refresh)))
 
 
@@ -388,6 +492,12 @@ Must be updated using `slurm-update-squeue-format' whenever
 Must be updated using `slurm-update-squeue-format' whenever
 `slurm-squeue-format' is modified.")
 
+(defvar slurm--sacct-format-columns nil
+  "Definition of columns in the squeue output.
+
+Must be updated using `slurm-update-squeue-format' whenever
+`slurm-squeue-format' is modified.")
+
 
 (defun slurm--map-squeue-format (fun)
   "Helper function to walk the squeue format.
@@ -399,6 +509,17 @@ FUN (name width &optional align)"
   (-map (lambda (field)
           (apply fun field))
         slurm-squeue-format))
+
+(defun slurm--map-sacct-format (fun)
+  "Helper function to walk the squeue format.
+
+FUN is called for each field specification in
+`slurm-squeue-format'.  It should have the following prototype:
+
+FUN (name width &optional align)"
+  (-map (lambda (field)
+          (apply fun field))
+        slurm-sacct-format))
 
 (defun slurm-update-squeue-format ()
   "Update internal variables when `slurm-squeue-format' is changed.
@@ -423,6 +544,8 @@ Updated variables are `slurm--squeue-format-columns' and
                (setq pos (+ pos width 1))))))))
 (slurm-update-squeue-format)
 
+
+
 (defun slurm--squeue-get-column (name)
   "Get the value of the NAME column in the current line.
 
@@ -435,6 +558,28 @@ listed in `slurm-squeue-format'."
     (s-trim (buffer-substring-no-properties
              (+ line-beg col-beg)
              (+ line-beg col-end)))))
+
+
+(defun slurm-update-sacct-format ()
+  "Update internal variables when `slurm-squeue-format' is changed.
+
+Updated variables are `slurm--squeue-format-columns' and
+`slurm--squeue-format-switch'."
+  (setq slurm--sacct-format-switch
+        (-reduce
+         (lambda (a b) (concat a "," b))
+         (slurm--map-sacct-format
+          (lambda (name width &optional align)
+                   (format "%s%s%d" name "%" width)))))
+
+  (setq slurm--sacct-format-columns
+        (let ((pos 0))
+          (slurm--map-sacct-format
+           (lambda (name width &optional align)
+             (prog1
+                 (list name pos (+ pos width))
+               (setq pos (+ pos width 1))))))))
+(slurm-update-sacct-format)
 
 
 ;; **** Filtering
@@ -450,6 +595,11 @@ listed in `slurm-squeue-format'."
   "Return the squeue switch to filter by user."
   (unless (string= (slurm--get :filter-user) "")
     (list "-u" (slurm--get :filter-user))))
+
+(defun slurm--sacct-take-date ()
+  "Return the squeue switch to filter by user."
+  (unless (string= (slurm--get :filter-user) "")
+    (list "-S" (org-read-date))))
 
 
 (defun slurm-filter-partition (partition)
@@ -515,7 +665,7 @@ In the `slurm-job-list' view, this is the job displayed on the
 current line.  In the `slurm-job-details' view, this is the job
 currently being displayed."
   (beginning-of-line)
-  (cond ((slurm--in-view 'slurm-job-list)
+  (cond ((or (slurm--in-view 'slurm-sacct) (slurm--in-view 'slurm-job-list))
          (let ((jobid (slurm--squeue-get-column 'jobid)))
            (unless (string-match "^[[:digit:]]" jobid)
              (error "Could not find valid job id on this line"))
@@ -540,11 +690,38 @@ currently being displayed."
   (when (eq major-mode 'slurm-mode)
     (when (slurm--in-view 'slurm-job-list)
       (let ((jobid  (slurm-job-id)))
+
+	(when (string-match "^\\([[:digit:]]+\\)_*"
+                               jobid)
+        (setq type  "array"
+              jobid (match-string 1 jobid)))
+
         (slurm--set :command `(("scontrol" "show" "job" ,jobid)))
         (slurm--set :jobid   jobid))
       (setq mode-name "Slurm (job details)")
       (slurm--set :view 'slurm-job-details)
       (slurm-refresh))))
+
+
+(defun slurm-seff (argp)
+  "Show details about resource usage SLURM job."
+
+  (interactive "P")
+  (when (eq major-mode 'slurm-mode)
+    (let ((jobid (slurm-job-id))
+          (type  "job"))
+
+      (when (and argp
+                 (string-match "^\\([[:digit:]]+\\)_\\([[:digit:]]+\\)$"
+                               jobid))
+        (setq type  "array"
+              jobid (match-string 1 jobid)))
+
+	(slurm--set :command `(("seff" ,jobid, "|" ,"sed" ,"-r" ,"s/[[:cntrl:]][[0-9]{1,3}m//g")))
+        (slurm--set :jobid   jobid))
+	(setq mode-name "Slurm (seff details)")
+	(slurm--set :view 'slurm-seff)
+        (slurm-refresh)))
 
 (defun slurm-job-cancel (argp)
   "Kill (cancel) current slurm job.
@@ -705,7 +882,10 @@ Key bindings:
   (interactive)
   (when (eq major-mode 'slurm-update-mode)
     (kill-buffer)
-    (switch-to-buffer "*slurm*")
+    (if (file-remote-p default-directory)
+       (switch-to-buffer (get-buffer-create (concat "*slurm-*" (file-remote-p default-directory 'host))))
+     (switch-to-buffer (get-buffer-create "*slurm*")))
+    ;(switch-to-buffer "*slurm*")
     (slurm-refresh)))
 
 (provide 'slurm-mode)
