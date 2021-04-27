@@ -145,7 +145,7 @@ URL is:
 
 ## License
 
-Copyright (C) 2012 François Févotte.
+Copyright (C) 2012-2021 François Févotte, Soumya Tripathy
 
 `slurm-script-mode.el` originally comes from the
 [slurm-helper](https://github.com/damienfrancois/slurm-helper/blob/master/slurm-mode.el) and is (C)
