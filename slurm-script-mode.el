@@ -26,7 +26,7 @@
 ;;; Commentary:
 
 ;; If you make improvements to this code or have suggestions, please do not hesitate to fork the
-;; repository or submit bug reports on github. The repository is at:
+;; repository or submit bug reports on github.  The repository is at:
 ;;
 ;;     https://github.com/ffevotte/slurm.el
 
@@ -48,7 +48,7 @@
   (let ((map (make-sparse-keymap)))
     (define-key map (kbd "C-c C-d") 'slurm-script-insert-directive)
     map)
-  "Keymap for `slurm-script-mode'.")
+  "Keymap for variable `slurm-script-mode'.")
 
 (defconst slurm-script-keywords
   '("account"         "acctg-freq"        "begin"           "checkpoint"   "checkpoint-dir"
@@ -69,14 +69,11 @@
 
 (defconst slurm-script-keywords-re
   (concat "--" (regexp-opt slurm-script-keywords) "\\b")
-  "Regular expression matching SBATCH keywords in a SLURM job
-submission script.")
+  "Regular expression matching SBATCH keywords in a submission script.")
 
 (defun slurm-script-insert-directive (keyword)
   "Interactively insert a SLURM directive of the form:
-
-#SBATCH --keyword
-"
+#SBATCH -- KEYWORD"
   (interactive
    (list (completing-read "Keyword: "
                           slurm-script-keywords nil t)))
@@ -86,7 +83,7 @@ submission script.")
   "Search for the next #SBATCH directive.
 
 Returns:
-- nil    if no SBATCH directives are found
+- nil    if no SBATCH directives are found in the LIMIT
 - error  if the following SBATCH directive is malformed
 - an integer corresponding to the point position of the next SBATCH
    directive beginning if it is found and well-formed."
@@ -113,6 +110,7 @@ Returns:
         'error))))
 
 (defun slurm-search-directive (limit)
+  "Search for the next #SBATCH directive in the LIMIT."
   (let (beg)
     (save-match-data
       (while (eq (setq beg (slurm-search-directive-1 limit)) 'error) t))
@@ -139,16 +137,26 @@ This mode also provides a command to insert new SBATCH directives :
       (font-lock-remove-keywords nil kwlist))))
 
 ;;;###autoload
-(defun turn-on-slurm-script-mode ()
-  "Turn slurm-mode on if SBATCH directives are found in the script."
-  (interactive)
+(define-globalized-minor-mode slurm-script-global-mode
+  slurm-script-mode
+  (lambda ()
   (save-excursion
-    (goto-char (point-min))
-    (when (slurm-search-directive (point-max))
-      (slurm-script-mode 1))))
+  (goto-char (point-min))
+  (when (slurm-search-directive (point-max))
+    (slurm-script-mode 1))))
+  )
+  (slurm-script-global-mode 1)
 
-;;;###autoload
-(add-hook 'sh-mode-hook 'turn-on-slurm-script-mode)
+;; (defun turn-on-slurm-script-mode ()
+;;   "Turn `slurm-mode' on if SBATCH directives are found in the script."
+;;   (interactive)
+;;   (save-excursion
+;;     (goto-char (point-min))
+;;     (when (slurm-search-directive (point-max))
+;;       (slurm-script-mode 1))))
+
+;; ;;;###autoload
+;; (add-hook 'sh-mode-hook 'turn-on-slurm-script-mode)
 
 (provide 'slurm-script-mode)
 

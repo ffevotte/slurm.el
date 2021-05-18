@@ -1,6 +1,9 @@
 ;;; slurm-mode.el --- interaction with the SLURM job scheduling system
 
 ;; Copyright (C) 2012 François Févotte
+;; Version:
+;; URL: https://github.com/ffevotte/slurm.el
+;; Repository: https://github.com/ffevotte/slurm.el.git
 
 ;; This file is NOT part of Emacs.
 
@@ -30,7 +33,7 @@
 
 (require 'dash)
 (require 's)
-
+(require 'org)
 
 ;; * Customizable variables
 
@@ -41,7 +44,7 @@
 
 ;;;###autoload
 (defcustom slurm-display-help t
-  "If non-nil, slurm-mode should display an help message at the top of the screen."
+  "If non-nil, `slurm-mode' should display an help message at the top of the screen."
   :group 'slurm
   :type 'boolean)
 
@@ -53,16 +56,15 @@
 
 ;;;###autoload
 (defcustom slurm-remote-host nil
-  "Execute SLURM commands on this remote host using SSH rather
-than executing them directly. See also `slurm-remote-username'
-and `slurm-remote-ssh-cmd'."
+  "Execute SLURM commands on this remote host.
+It uses SSH rather than executing them directlySee also `slurm-remote-username' and `slurm-remote-ssh-cmd'."
   :group 'slurm
   :type 'string)
 
 ;;;###autoload
 (defcustom slurm-remote-username nil
-  "Username to use for SSHing to the remote machine specified in
-`slurm-remote-host'."
+  "Username to use for SSHing to the remote machine.
+It is specified in `slurm-remote-host'."
   :group 'slurm
   :type 'string)
 
@@ -75,6 +77,7 @@ and `slurm-remote-ssh-cmd'."
   :type  'boolean)
 
 (defun slurm--set-squeue-format (var val)
+  "Set the argument for the squeue Command from VAR and VAL."
   (set-default var val)
   (when (fboundp 'slurm-update-squeue-format)
     (slurm-update-squeue-format)))
@@ -112,12 +115,13 @@ is changed to ensure the new value is used wherever necessary."
                                        (const right)))))
 
 (defun slurm--set-sacct-format (var val)
+  "Update the argument for the sacct Command from VAR and VAL."
   (set-default var val)
   (when (fboundp 'slurm-update-sacct-format)
     (slurm-update-sacct-format)))
 
 (defcustom slurm-sacct-format
-  '((jobid      15 left)
+  '((jobid      20 left)
     (jobname  20  right)
     (workdir  60  right)
     (state  25  right)
@@ -150,15 +154,15 @@ is changed to ensure the new value is used wherever necessary."
 ;; ** Process management
 
 (defun slurm--remote-command (cmd)
-  "Wraps SLURM command CMD in ssh if `slurm-remote-host' is
-set. Otherwise, CMD is returned unmodified."
+  "Wraps SLURM command CMD in ssh if `slurm-remote-host' is set.
+Otherwise, CMD is returned unmodified."
    (if slurm-remote-host
        (append `(,slurm-remote-host)
           (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
 cmd))
 
-(defun concatString (list)
-  "A non-recursive function that concatenates a list of strings."
+(defun slurm-concatString (list)
+  "A non-recursive function that concatenates a LIST of strings."
   (if (listp list)
       (let ((result ""))
         (dolist (item list)
@@ -201,7 +205,7 @@ ARGS is a plist containing the following entries:
          (with-current-buffer ,buffer-sym
            (erase-buffer)
            (apply 'eshell-command
-                  (concatString
+                  (slurm-concatString
                    (slurm--remote-command ,command-sym))
                    t
                    nil))
@@ -258,7 +262,7 @@ Assign it the new value VALUE."
 
 ;;;###autoload
 (defun slurm ()
-  "Open a slurm-mode buffer to manage jobs."
+  "Open a `slurm-mode' buffer to manage jobs."
   (interactive)
   (if (file-remote-p default-directory)
       (setq slurm-remote-host (concat "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
@@ -271,23 +275,33 @@ Assign it the new value VALUE."
       (slurm-refresh)
     (slurm-mode)))
 
-
-(defvar slurm-mode-map
+(defvar slurm-mode-view-map
   (let ((map (make-sparse-keymap)))
-    (define-key map (kbd "h")   'describe-mode)
-    (define-key map (kbd "?")   'describe-mode)
     (define-key map (kbd "j")   'slurm-job-list)
     (define-key map (kbd "a")   'slurm-sacct)
-    (define-key map (kbd "S")   'slurm-seff)
     (define-key map (kbd "p")   'slurm-partition-list)
     (define-key map (kbd "i")   'slurm-cluster-info)
     (define-key map (kbd "g")   'slurm-refresh)
+    map)
+  "Keymap for `slurm-mode-view'.")
+(defvar slurm-mode-partition-map
+  (let ((map (make-sparse-keymap)))
     (define-key map (kbd "RET") 'slurm-details)
+    map)
+  "Keymap for `slurm-mode-partition'.")
+
+(defvar slurm-mode-job-map
+  (let ((map (make-sparse-keymap)))
+    (define-key map (kbd "RET") 'slurm-details)
+    (define-key map (kbd "U")   'slurm-job-user-details)
+    (define-key map (kbd "S")   'slurm-seff)
     (define-key map (kbd "d")   'slurm-job-cancel)
     (define-key map (kbd "k")   'slurm-job-cancel)
     (define-key map (kbd "u")   'slurm-job-update)
-    (define-key map (kbd "e")   'slurm-job-update)
-    (define-key map (kbd "U")   'slurm-job-user-details)
+    map)
+  "Keymap for `slurm-mode-job'.")
+(defvar slurm-mode-manipulation-map
+  (let ((map (make-sparse-keymap)))
     (define-key map (kbd "/ u") 'slurm-filter-user)
     (define-key map (kbd "/ p") 'slurm-filter-partition)
     (define-key map (kbd "s u") 'slurm-sort-user)
@@ -297,47 +311,39 @@ Assign it the new value VALUE."
     (define-key map (kbd "s d") 'slurm-sort-default)
     (define-key map (kbd "s c") 'slurm-sort)
     map)
-  "Keymap for slurm-mode.")
-
+  "Keymap for `slurm-mode-manipulation'.")
+(defvar slurm-mode-map
+  (let ((map (make-sparse-keymap)))
+    (set-keymap-parent map (make-composed-keymap (list slurm-mode-view-map slurm-mode-partition-map
+						 slurm-mode-job-map slurm-mode-manipulation-map)))
+    (define-key map (kbd "h")   'describe-mode)
+    (define-key map (kbd "?")   'describe-mode)
+    map)
+  "Keymap for `slurm-mode'.")
 
 (eval-when-compile
   (defvar auto-revert-interval))
 
-(defun slurm-mode ()
+(define-derived-mode slurm-mode nil "Slurm"
   "Major-mode for interacting with slurm.
 
   \\[describe-mode] - Display this help.
-
 Views:
-  \\[slurm-job-list] - View jobs list.
-  \\[slurm-sacct] - View history of jobs.
-  \\[slurm-partition-list] - View partitions list.
-  \\[slurm-cluster-info] - View cluster information.
-  \\[slurm-refresh] - Refresh current view.
+\\{slurm-mode-view-map}
 
 Operations on partitions:
-  \\[slurm-details] - Show partition details.
+\\{slurm-mode-partition-map}
 
 Operations on jobs:
-  \\[slurm-details] - Show job details.
-  \\[slurm-job-user-details] - Show information about job submitter, as returned by `finger'.
-  \\[slurm-seff] - View resource usage of jobs.
-  \\[slurm-job-cancel] - Kill (cancel) job.
-  \\[slurm-job-update] - Edit (update) job.
+\\{slurm-mode-job-map}
 
 Manipulations of the jobs list:
-  \\[slurm-filter-user] - Filter jobs by user name.
-  \\[slurm-filter-partition] - Filter jobs by partition.
-  \\[slurm-sort-user] - Sort jobs by user name.
-  \\[slurm-sort-partition] - Sort jobs by partition.
-  \\[slurm-sort-jobname] - Sort jobs by job/step name.
-  \\[slurm-sort-default] - Default jobs sorting order.
-  \\[slurm-sort] - Customize jobs sorting order."
+\\{slurm-mode-manipulation-map}"
   (interactive)
-  (kill-all-local-variables)
-  (use-local-map slurm-mode-map)
-  (setq mode-name "Slurm")
-  (setq major-mode 'slurm-mode)
+  ;; (kill-all-local-variables)
+  ;; (use-local-map slurm-mode-map)
+  ;; (setq mode-name "Slurm")
+  ;; (setq major-mode 'slurm-mode)
   (hl-line-mode 1)
   (toggle-truncate-lines 1)
   (setq buffer-read-only t)
@@ -367,7 +373,7 @@ Manipulations of the jobs list:
   (set (make-local-variable 'revert-buffer-function)
        (lambda (&optional ignore-auto noconfirm) (slurm-refresh)))
   (set (make-local-variable 'buffer-stale-function)
-       #'(lambda (&optional noconfirm) 'fast))
+       (lambda (&optional noconfirm) 'fast))
   (set (make-local-variable 'auto-revert-interval) 30)
   (when (fboundp 'auto-revert-set-timer)
     (auto-revert-set-timer)))
@@ -704,7 +710,7 @@ currently being displayed."
 
 
 (defun slurm-seff (argp)
-  "Show details about resource usage SLURM job."
+  "Show details about resource usage SLURM jobid ARGP."
 
   (interactive "P")
   (when (eq major-mode 'slurm-mode)
@@ -820,14 +826,14 @@ If PARTITION is nil, show stats for the entire cluster."
 ;; * Slurm-update-mode
 
 (defvar slurm-update-mode-map nil
-  "Keymap for slurm-update-mode.")
+  "Keymap for `slurm-update-mode'.")
 (if slurm-update-mode-map ()
   (progn
     (setq slurm-update-mode-map text-mode-map)
     (define-key slurm-update-mode-map (kbd "C-c C-c") 'slurm-update-send)
     (define-key slurm-update-mode-map (kbd "C-c C-q") 'slurm-update-quit)))
 
-(defun slurm-update-mode ()
+(define-derived-mode slurm-update-mode nil "Slurm-Update"
   "Major-mode for updating slurm entities.
 
 Edit the line you want to update and hit \\[slurm-update-send] to validate your changes.
@@ -837,10 +843,10 @@ Key bindings:
   \\[slurm-update-refresh] - Refresh view.
   \\[slurm-update-quit] - Quit this mode."
   (interactive)
-  (kill-all-local-variables)
-  (use-local-map slurm-update-mode-map)
-  (setq mode-name "Slurm update")
-  (setq major-mode 'slurm-update-mode)
+  ;; (kill-all-local-variables)
+  ;; (use-local-map slurm-update-mode-map)
+  ;; (setq mode-name "Slurm update")
+  ;; (setq major-mode 'slurm-update-mode)
   (make-local-variable 'slurm--state)
   (hl-line-mode 1))
 
