@@ -1,4 +1,4 @@
-;;; slurm-mode.el --- interaction with the SLURM job scheduling system
+;;; slurm-mode.el --- Interaction with the SLURM job scheduling system
 
 ;; Copyright (C) 2012 François Févotte
 ;; Version:
