@@ -340,7 +340,7 @@ Manipulations of the jobs list:
   (toggle-truncate-lines 1)
   (setq buffer-read-only t)
 
-  (set (make-local-variable 'slurm--state) nil)
+  (setq-local slurm--state nil)
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
@@ -362,11 +362,11 @@ Manipulations of the jobs list:
   (slurm-job-list)
 
   ;; Arrange for `revert-buffer' to call `slurm-refresh'
-  (set (make-local-variable 'revert-buffer-function)
+  (setq-local revert-buffer-function
        (lambda (&optional ignore-auto noconfirm) (slurm-refresh)))
-  (set (make-local-variable 'buffer-stale-function)
+  (setq-local buffer-stale-function
        (lambda (&optional noconfirm) 'fast))
-  (set (make-local-variable 'auto-revert-interval) 30)
+  (setq-local auto-revert-interval 30)
   (when (fboundp 'auto-revert-set-timer)
     (auto-revert-set-timer)))
 
