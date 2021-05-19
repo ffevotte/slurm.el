@@ -263,7 +263,7 @@ Assign it the new value VALUE."
   (if (file-remote-p default-directory)
       (switch-to-buffer (get-buffer-create (concat "slurm-" (file-remote-p default-directory 'host))))
     (switch-to-buffer (get-buffer-create "slurm")))
-  (if (eq major-mode 'slurm-mode)
+  (if (derived-mode-p 'slurm-mode)
       (slurm-refresh)
     (slurm-mode)))
 
