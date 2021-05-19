@@ -77,7 +77,7 @@
   (interactive
    (list (completing-read "Keyword: "
                           slurm-script-keywords nil t)))
-  (insert (concat "#SBATCH --" keyword " ")))
+  (insert "#SBATCH --" keyword " "))
 
 (defun slurm-search-directive-1 (limit)
   "Search for the next #SBATCH directive.
@@ -140,12 +140,13 @@ This mode also provides a command to insert new SBATCH directives :
 (define-globalized-minor-mode slurm-script-global-mode
   slurm-script-mode
   (lambda ()
-  (save-excursion
-  (goto-char (point-min))
-  (when (slurm-search-directive (point-max))
-    (slurm-script-mode 1))))
-  )
-  (slurm-script-global-mode 1)
+    (save-excursion
+      (goto-char (point-min))
+      (when (slurm-search-directive (point-max))
+        (slurm-script-mode 1))))
+  :group 'slurm)
+
+(slurm-script-global-mode 1)
 
 ;; (defun turn-on-slurm-script-mode ()
 ;;   "Turn `slurm-mode' on if SBATCH directives are found in the script."
@@ -160,4 +161,4 @@ This mode also provides a command to insert new SBATCH directives :
 
 (provide 'slurm-script-mode)
 
-;; slurm-script-mode.el ends here
+;;; slurm-script-mode.el ends here

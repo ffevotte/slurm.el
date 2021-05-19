@@ -1,4 +1,4 @@
-;;; slurm-mode.el --- interaction with the SLURM job scheduling system
+;;; slurm-mode.el --- Interaction with the SLURM job scheduling system
 
 ;; Copyright (C) 2012 François Févotte
 ;; Version:
@@ -158,17 +158,8 @@ is changed to ensure the new value is used wherever necessary."
 Otherwise, CMD is returned unmodified."
    (if slurm-remote-host
        (append `(,slurm-remote-host)
-          (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
-cmd))
-
-(defun slurm-concatString (list)
-  "A non-recursive function that concatenates a LIST of strings."
-  (if (listp list)
-      (let ((result ""))
-        (dolist (item list)
-          (if (stringp item)
-              (setq result (concat result item " "))))
-        result)))
+               (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
+     cmd))
 
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
@@ -205,10 +196,11 @@ ARGS is a plist containing the following entries:
          (with-current-buffer ,buffer-sym
            (erase-buffer)
            (apply 'eshell-command
-                  (slurm-concatString
-                   (slurm--remote-command ,command-sym))
-                   t
-                   nil))
+                  (mapconcat 'identity
+                             (slurm--remote-command ,command-sym)
+                             " ")
+                  t
+                  nil))
          ,@(when message
              `((message "%s...done." ,message-sym)))
          ,@(when post
@@ -271,7 +263,7 @@ Assign it the new value VALUE."
   (if (file-remote-p default-directory)
       (switch-to-buffer (get-buffer-create (concat "slurm-" (file-remote-p default-directory 'host))))
     (switch-to-buffer (get-buffer-create "slurm")))
-  (if (eq major-mode 'slurm-mode)
+  (if (derived-mode-p 'slurm-mode)
       (slurm-refresh)
     (slurm-mode)))
 
@@ -348,7 +340,7 @@ Manipulations of the jobs list:
   (toggle-truncate-lines 1)
   (setq buffer-read-only t)
 
-  (set (make-local-variable 'slurm--state) nil)
+  (setq-local slurm--state nil)
 
   ;; Initialize user filter
   (if slurm-filter-user-at-start
@@ -370,11 +362,11 @@ Manipulations of the jobs list:
   (slurm-job-list)
 
   ;; Arrange for `revert-buffer' to call `slurm-refresh'
-  (set (make-local-variable 'revert-buffer-function)
+  (setq-local revert-buffer-function
        (lambda (&optional ignore-auto noconfirm) (slurm-refresh)))
-  (set (make-local-variable 'buffer-stale-function)
+  (setq-local buffer-stale-function
        (lambda (&optional noconfirm) 'fast))
-  (set (make-local-variable 'auto-revert-interval) 30)
+  (setq-local auto-revert-interval 30)
   (when (fboundp 'auto-revert-set-timer)
     (auto-revert-set-timer)))
 
@@ -827,11 +819,10 @@ If PARTITION is nil, show stats for the entire cluster."
 
 (defvar slurm-update-mode-map nil
   "Keymap for `slurm-update-mode'.")
-(if slurm-update-mode-map ()
-  (progn
-    (setq slurm-update-mode-map text-mode-map)
-    (define-key slurm-update-mode-map (kbd "C-c C-c") 'slurm-update-send)
-    (define-key slurm-update-mode-map (kbd "C-c C-q") 'slurm-update-quit)))
+(unless slurm-update-mode-map
+  (setq slurm-update-mode-map text-mode-map)
+  (define-key slurm-update-mode-map (kbd "C-c C-c") 'slurm-update-send)
+  (define-key slurm-update-mode-map (kbd "C-c C-q") 'slurm-update-quit))
 
 (define-derived-mode slurm-update-mode nil "Slurm-Update"
   "Major-mode for updating slurm entities.
