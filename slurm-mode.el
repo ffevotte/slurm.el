@@ -819,11 +819,10 @@ If PARTITION is nil, show stats for the entire cluster."
 
 (defvar slurm-update-mode-map nil
   "Keymap for `slurm-update-mode'.")
-(if slurm-update-mode-map ()
-  (progn
-    (setq slurm-update-mode-map text-mode-map)
-    (define-key slurm-update-mode-map (kbd "C-c C-c") 'slurm-update-send)
-    (define-key slurm-update-mode-map (kbd "C-c C-q") 'slurm-update-quit)))
+(unless slurm-update-mode-map
+  (setq slurm-update-mode-map text-mode-map)
+  (define-key slurm-update-mode-map (kbd "C-c C-c") 'slurm-update-send)
+  (define-key slurm-update-mode-map (kbd "C-c C-q") 'slurm-update-quit))
 
 (define-derived-mode slurm-update-mode nil "Slurm-Update"
   "Major-mode for updating slurm entities.
