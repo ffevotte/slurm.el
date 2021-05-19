@@ -161,4 +161,4 @@ This mode also provides a command to insert new SBATCH directives :
 
 (provide 'slurm-script-mode)
 
-;; slurm-script-mode.el ends here
+;;; slurm-script-mode.el ends here
