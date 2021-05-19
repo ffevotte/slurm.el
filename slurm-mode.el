@@ -161,15 +161,6 @@ Otherwise, CMD is returned unmodified."
           (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
 cmd))
 
-(defun slurm-concatString (list)
-  "A non-recursive function that concatenates a LIST of strings."
-  (if (listp list)
-      (let ((result ""))
-        (dolist (item list)
-          (if (stringp item)
-              (setq result (concat result item " "))))
-        result)))
-
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
   "Synchronously run a command.
@@ -205,10 +196,11 @@ ARGS is a plist containing the following entries:
          (with-current-buffer ,buffer-sym
            (erase-buffer)
            (apply 'eshell-command
-                  (slurm-concatString
-                   (slurm--remote-command ,command-sym))
-                   t
-                   nil))
+                  (mapconcat 'identity
+                             (slurm--remote-command ,command-sym)
+                             " ")
+                  t
+                  nil))
          ,@(when message
              `((message "%s...done." ,message-sym)))
          ,@(when post
