@@ -77,7 +77,7 @@
   (interactive
    (list (completing-read "Keyword: "
                           slurm-script-keywords nil t)))
-  (insert (concat "#SBATCH --" keyword " ")))
+  (insert "#SBATCH --" keyword " "))
 
 (defun slurm-search-directive-1 (limit)
   "Search for the next #SBATCH directive.
