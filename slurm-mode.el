@@ -158,8 +158,8 @@ is changed to ensure the new value is used wherever necessary."
 Otherwise, CMD is returned unmodified."
    (if slurm-remote-host
        (append `(,slurm-remote-host)
-          (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
-cmd))
+               (if (listp cmd) `(,(combine-and-quote-strings cmd)) `(,cmd)))
+     cmd))
 
 (defvar slurm--buffer)
 (defmacro slurm--run-command (&rest args)
