@@ -21,7 +21,7 @@ Ensure the following dependencies are installed:
 
 ### From MELPA
 
- =M-x package-install RET slurm-mode RET= to install =slurm.el= from [[https://melpa.org/][MELPA]].
+ `M-x package-install RET slurm-mode RET` to install `slurm.el` from [MELPA](https://melpa.org/).
 
 ### Manually
 
@@ -151,6 +151,9 @@ scripts.
 
 All these variables can be customized via `M-x customize-group RET slurm RET`.
 
+## Demo
+
+Check the `slurm-demo.gif` in the `demo` directory.
 
 ## Contributing
 
@@ -159,10 +162,6 @@ repository or submit bug reports on [github](https://github.com/ffevotte/slurm.e
 URL is:
 
     https://github.com/ffevotte/slurm.el.git
-
-## Demo
-
-[Example of slurm-mode](http://ffevotte.github.com/slurm.el/demo/slurm-demo.gif)
 
 ## License
 
