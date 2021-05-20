@@ -1,7 +1,9 @@
+[![MELPA](https://melpa.org/packages/slurm-mode-badge.svg)](https://melpa.org/#/slurm-mode)
+
 # slurm.el
 
 `slurm.el` is an Emacs extension allowing to work more easily with the
-[SLURM](https://computing.llnl.gov/linux/slurm/) job scheduling system.
+[SLURM](https://github.com/SchedMD/slurm) job scheduling system.
 
 It is composed of two parts:
 
@@ -15,8 +17,15 @@ It is composed of two parts:
 Ensure the following dependencies are installed:
 - [`dash.el`](https://github.com/magnars/dash.el)
 - [`s.el`](https://github.com/magnars/s.el)
+- [`org-mode`](https://orgmode.org/)
 
-Then, just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
+### From MELPA
+
+ =M-x package-install RET slurm-mode RET= to install =slurm.el= from [[https://melpa.org/][MELPA]].
+
+### Manually
+
+Just put the following lines in your Emacs initialization file (`.emacs` or `.emacs.d/init.el`):
 
 ```lisp
 (add-to-list 'load-path "/path/to/slurm.el")
@@ -36,17 +45,17 @@ or misspelled keywords, unproperly quoted arguments, ...)
 New directives can also be easily inserted using the `C-c C-d` binding, which proposes completion
 on the keywords.
 
-![Example of slurm-script-mode](http://ffevotte.github.com/slurm.el/slurm-script-mode.png)
+<!--![Example of slurm-script-mode](http://ffevotte.github.com/slurm.el/slurm-script-mode.png)   -->
 
 
 ## `slurm-mode`
 
 ### Basic usage
 
-Just run `M-x slurm` to see a list of all SLURM jobs on the cluster.
+Just run `M-x slurm` on any remote buffer to see a list of all SLURM jobs on the cluster. It can handle multiple SLURM servers by creating a separate buffer for each server.
 
 `slurm.el` defines several views to present SLURM information. Each view first presents the command
-line which have been used to obtain the information presented.
+line which has been used to obtain the information presented.
 
 In all views, the following bindings are available:
 
@@ -60,8 +69,8 @@ The following key bindings can be used to switch between views:
 
 - `j`: Jobs list (default view)
 - `p`: Partitions list
-- `i`: cluster Information
-
+- `i`: Cluster Information
+- `a`: Accounting information for all jobs
 
 #### Jobs list
 
@@ -93,6 +102,8 @@ A few operations can be done from this view:
 
 - `k` or `d`: Kill job by issuing the `scancel JOBID` command.
 
+- `S`: Prints a summary of requested and used resources of the job
+
 - `e` or `u`: Edit (or Update) job.
 
    In this mode, job submission parameters can be interactively updated (as could be done using the
@@ -115,6 +126,11 @@ state, as obtained using the `sinfo` command.
 
 This view displays details on the current cluster state, as obtained with the `sinfo` command.
 
+#### Accounting information
+
+This view displays accounting information of all the jobs submitted from a given date, as obtained with the `sacct` command.
+
+In this view, pressing `S` shows the summary of reuested and used resources of the past jobs. A feature to keep track of resources utilized by the elapsed jobs.
 
 ### Customization
 
@@ -131,6 +147,8 @@ scripts.
 
 - `slurm-squeue-format`: the list of fields to display in the jobs list.
 
+- `slurm-sacct-format`: the list of fields to display in the accounting information.
+
 All these variables can be customized via `M-x customize-group RET slurm RET`.
 
 
@@ -142,6 +160,9 @@ URL is:
 
     https://github.com/ffevotte/slurm.el.git
 
+## Demo
+
+[Example of slurm-mode](http://ffevotte.github.com/slurm.el/demo/slurm-demo.gif)
 
 ## License
 
