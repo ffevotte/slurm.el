@@ -257,8 +257,7 @@ Assign it the new value VALUE."
   "Open a `slurm-mode' buffer to manage jobs."
   (interactive)
   (if (file-remote-p default-directory)
-      (setq slurm-remote-host (concat "/ssh:" (file-remote-p default-directory 'host) ":" ";"))
-    (setq slurm-remote-host nil))
+      (setq slurm-remote-host (concat "/ssh:" (file-remote-p default-directory 'host) ":" ";")))
 
   (if (file-remote-p default-directory)
       (switch-to-buffer (get-buffer-create (concat "slurm-" (file-remote-p default-directory 'host))))
@@ -415,7 +414,6 @@ Schedule the following command to be executed after termination of the current o
     (slurm--set :old-position (max (line-number-at-pos) 8))
     (slurm--set :running-commands (slurm--get :command))
     (setq buffer-read-only nil)
-    (setq slurm-remote-host (concat "/ssh:" (nth 1 (split-string (buffer-name) "-")) ":" ";"))
     (erase-buffer)
     (insert (format-time-string "%Y-%m-%d %H:%M:%S\n"))
     (when slurm-display-help
